@@ -126,6 +126,8 @@ export function toolUseAssistantLine(opts: {
   sessionId?: string;
   ts?: string;
   model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
 }): string {
   const { name, input, toolUseId = `toolu_${Math.random().toString(36).slice(2, 10)}` } = opts;
   return assistantLine({
@@ -134,6 +136,8 @@ export function toolUseAssistantLine(opts: {
     sessionId: opts.sessionId,
     ts: opts.ts,
     model: opts.model,
+    inputTokens: opts.inputTokens,
+    outputTokens: opts.outputTokens,
     contentBlocks: [{ type: "tool_use", id: toolUseId, name, input }],
   });
 }
