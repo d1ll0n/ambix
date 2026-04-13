@@ -60,4 +60,26 @@ describe("stage", () => {
     expect(layout.truncatedIndices).toEqual([0]);
     expect(existsSync(path.join(layout.turnsDir, "00000.json"))).toBe(true);
   });
+
+  it("creates out/ and bin/ directories with a lint-output wrapper script", async () => {
+    const text = joinLines(
+      userLine({ text: "hello", uuid: "u1" }),
+      assistantLine({ text: "world", uuid: "a1", parentUuid: "u1" })
+    );
+    const session = new Session(writeFixture(dir, "src.jsonl", text));
+
+    const tmpRoot = path.join(dir, "tmp");
+    const layout = await stage(session, tmpRoot);
+
+    expect(existsSync(layout.outDir)).toBe(true);
+    expect(existsSync(layout.binDir)).toBe(true);
+    const wrapperPath = path.join(layout.binDir, "lint-output");
+    expect(existsSync(wrapperPath)).toBe(true);
+    const { readFileSync, statSync } = await import("node:fs");
+    const wrapper = readFileSync(wrapperPath, "utf8");
+    expect(wrapper.startsWith("#!/bin/bash") || wrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(wrapper).toContain("lint-cli");
+    const mode = statSync(wrapperPath).mode;
+    expect(mode & 0o100).not.toBe(0);
+  });
 });

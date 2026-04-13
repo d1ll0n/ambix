@@ -1,5 +1,6 @@
 // src/stage/index.ts
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, chmod } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import type { Session } from "parse-claude-logs";
 import { defaultFileHistoryDir } from "parse-claude-logs";
@@ -69,6 +70,13 @@ export async function stage(
   const subagentsDir = path.join(tmpDir, "subagents");
   const subResult = await stageSubagents(session, subagentsDir);
 
+  // 7. Create out/ and bin/ directories and write the lint-output wrapper
+  const outDir = path.join(tmpDir, "out");
+  const binDir = path.join(tmpDir, "bin");
+  await mkdir(outDir, { recursive: true });
+  await mkdir(binDir, { recursive: true });
+  await writeLintWrapper(binDir);
+
   return {
     tmpDir,
     metadataPath,
@@ -77,6 +85,8 @@ export async function stage(
     spillDir,
     subagentsDir,
     fileHistoryDir,
+    outDir,
+    binDir,
     truncatedIndices,
     spillCount: spillResult.copied,
     subagentCount: subResult.staged,
@@ -97,4 +107,31 @@ function containsTruncationStub(value: unknown): boolean {
     }
   }
   return false;
+}
+
+async function writeLintWrapper(binDir: string): Promise<void> {
+  const thisFile = fileURLToPath(import.meta.url);
+  const pkgRoot = await findPackageRoot(thisFile);
+  const lintJs = path.join(pkgRoot, "dist", "agent", "lint-cli.js");
+
+  const script = `#!/bin/bash
+exec node ${lintJs} "$@"
+`;
+  const wrapperPath = path.join(binDir, "lint-output");
+  await writeFile(wrapperPath, script, "utf8");
+  await chmod(wrapperPath, 0o755);
+}
+
+async function findPackageRoot(startFile: string): Promise<string> {
+  const { access } = await import("node:fs/promises");
+  let dir = path.dirname(startFile);
+  while (dir !== "/" && dir !== ".") {
+    try {
+      await access(path.join(dir, "package.json"));
+      return dir;
+    } catch {
+      dir = path.dirname(dir);
+    }
+  }
+  return process.cwd();
 }

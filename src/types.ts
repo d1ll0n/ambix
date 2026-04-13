@@ -76,6 +76,8 @@ export interface StageLayout {
   spillDir: string;
   subagentsDir: string;
   fileHistoryDir: string;
+  outDir: string;
+  binDir: string;
   truncatedIndices: number[];
   spillCount: number;
   subagentCount: number;
