@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { Session } from "parse-claude-logs";
+import { Session, parsePersistedOutput } from "parse-claude-logs";
 import { condenseEntries } from "../../src/stage/condense.js";
 import {
   makeTempDir,
@@ -85,5 +85,92 @@ describe("condenseEntries — basic", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 10000 });
     expect(result[0].content).toBe("small content");
+  });
+});
+
+describe("condenseEntries — truncation", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanupTempDir(dir);
+  });
+
+  it("replaces large user content with a rehydration stub", async () => {
+    const big = "x".repeat(5000);
+    const text = joinLines(userLine({ text: big, uuid: "u1" }));
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 100 });
+
+    const content = result[0].content as { truncated: true; ref: string; bytes: number; tokens_est: number; preview: string };
+    expect(content.truncated).toBe(true);
+    expect(content.ref).toBe("turns/00000.json");
+    expect(content.bytes).toBeGreaterThan(100);
+    expect(content.tokens_est).toBeGreaterThan(0);
+    expect(content.preview.length).toBeGreaterThan(0);
+  });
+
+  it("replaces large tool_use input fields with a stub but keeps the wrapper", async () => {
+    const big = "y".repeat(5000);
+    const text = joinLines(
+      assistantLine({
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_X",
+            name: "Edit",
+            input: { file_path: "src/big.ts", old_string: big, new_string: "ok" },
+          },
+        ],
+        uuid: "a1",
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 100 });
+    const blocks = result[0].content as Array<Record<string, unknown>>;
+    expect(blocks).toHaveLength(1);
+    const tu = blocks[0] as { type: string; id: string; name: string; input: { _truncated?: boolean } };
+    expect(tu.type).toBe("tool_use");
+    expect(tu.id).toBe("toolu_X");
+    expect(tu.name).toBe("Edit");
+    expect(tu.input._truncated).toBe(true);
+  });
+
+  it("replaces persisted-output tool_results with a spill stub", async () => {
+    const persisted = `<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/path/tool-results/toolu_X.json\n\nPreview (first 2KB):\nfirst few lines of the spill\n`;
+    // sanity: parse-claude-logs detects this format
+    expect(parsePersistedOutput(persisted)).not.toBe(null);
+
+    const text = joinLines(
+      JSON.stringify({
+        type: "user",
+        uuid: "u1",
+        parentUuid: null,
+        sessionId: "session-test",
+        timestamp: "2026-04-13T10:00:00Z",
+        message: {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "toolu_X", content: persisted },
+          ],
+        },
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 10000 });
+    const blocks = result[0].content as Array<Record<string, unknown>>;
+    const tr = blocks[0] as { type: string; tool_use_id: string; result: { truncated: boolean; ref: string; bytes: number; preview: string } };
+    expect(tr.type).toBe("tool_result");
+    expect(tr.tool_use_id).toBe("toolu_X");
+    expect(tr.result.truncated).toBe(true);
+    expect(tr.result.ref).toBe("spill/toolu_X.json");
+    expect(tr.result.preview).toContain("first few lines");
   });
 });
