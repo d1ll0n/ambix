@@ -141,7 +141,7 @@ const defaultQueryFn: QueryFn = async function* (opts) {
       model: opts.model,
       maxTurns: opts.maxTurns,
       allowedTools: opts.allowedTools,
-      permissionMode: "bypassPermissions",
+      permissionMode: "acceptEdits",
     },
   });
 
