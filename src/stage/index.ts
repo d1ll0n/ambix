@@ -54,9 +54,11 @@ export async function stage(
   const turnsDir = path.join(tmpDir, "turns");
   await writeFullTurns(turnsDir, entries, truncatedIndices);
 
-  // 4. Spill files
+  // 4. Spill files — collectAndCopySpills walks parent + subagents
+  //    internally because subagent tool_results can reference spills
+  //    that live in the parent's shared tool-results/ dir.
   const spillDir = path.join(tmpDir, "spill");
-  const spillResult = await collectAndCopySpills(entries, spillDir);
+  const spillResult = await collectAndCopySpills(session, spillDir);
 
   // 5. File history
   const fileHistoryDir = path.join(tmpDir, "file-history");

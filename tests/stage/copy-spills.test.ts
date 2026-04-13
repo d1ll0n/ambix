@@ -8,6 +8,8 @@ import {
   cleanupTempDir,
   writeFixture,
   joinLines,
+  userLine,
+  assistantLine,
 } from "../helpers/fixtures.js";
 
 describe("collectAndCopySpills", () => {
@@ -42,10 +44,9 @@ describe("collectAndCopySpills", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const entries = await session.messages();
 
     const destDir = path.join(dir, "spill");
-    const result = await collectAndCopySpills(entries, destDir);
+    const result = await collectAndCopySpills(session, destDir);
 
     expect(result.copied).toBe(1);
     expect(existsSync(path.join(destDir, "toolu_X.json"))).toBe(true);
@@ -66,10 +67,9 @@ describe("collectAndCopySpills", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const entries = await session.messages();
 
     const destDir = path.join(dir, "spill");
-    const result = await collectAndCopySpills(entries, destDir);
+    const result = await collectAndCopySpills(session, destDir);
 
     expect(result.copied).toBe(0);
     expect(existsSync(destDir)).toBe(false);
@@ -91,12 +91,89 @@ describe("collectAndCopySpills", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const entries = await session.messages();
 
     const destDir = path.join(dir, "spill");
-    const result = await collectAndCopySpills(entries, destDir);
+    const result = await collectAndCopySpills(session, destDir);
 
     expect(result.copied).toBe(0);
     expect(result.missing).toBe(1);
+  });
+
+  it("copies spill files referenced only by a subagent (not the parent)", async () => {
+    // Real spill files on disk
+    const spillSrc = path.join(dir, "spill-source");
+    mkdirSync(spillSrc, { recursive: true });
+    const parentSpillPath = path.join(spillSrc, "parent.txt");
+    const subSpillPath = path.join(spillSrc, "sub.txt");
+    writeFileSync(parentSpillPath, "parent spill content");
+    writeFileSync(subSpillPath, "sub spill content");
+
+    // Set up new-layout structure:
+    // <project>/<parent-uuid>.jsonl is the parent
+    // <project>/<parent-uuid>/subagents/agent-<uuid>.jsonl is the subagent
+    const project = path.join(dir, "project");
+    mkdirSync(project, { recursive: true });
+    const parentUuid = "11111111-1111-1111-1111-111111111111";
+    const parentPath = path.join(project, `${parentUuid}.jsonl`);
+
+    // Parent references parent spill
+    const parentWrapper = `<persisted-output>\nOutput too large (1KB). Full output saved to: ${parentSpillPath}\n\nPreview (first 2KB):\nparent\n`;
+    writeFileSync(
+      parentPath,
+      joinLines(
+        userLine({ text: "hi", sessionId: parentUuid, uuid: "p1" }),
+        assistantLine({ text: "ok", sessionId: parentUuid, uuid: "p2", parentUuid: "p1" }),
+        JSON.stringify({
+          type: "user",
+          uuid: "p3",
+          parentUuid: "p2",
+          sessionId: parentUuid,
+          timestamp: "2026-04-13T10:00:00Z",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu_parent", content: parentWrapper },
+            ],
+          },
+        })
+      )
+    );
+
+    // Subagent references sub spill
+    const subDir = path.join(project, parentUuid, "subagents");
+    mkdirSync(subDir, { recursive: true });
+    const agentUuid = "22222222-2222-2222-2222-222222222222";
+    const subWrapper = `<persisted-output>\nOutput too large (1KB). Full output saved to: ${subSpillPath}\n\nPreview (first 2KB):\nsub\n`;
+    writeFileSync(
+      path.join(subDir, `agent-${agentUuid}.jsonl`),
+      joinLines(
+        userLine({ text: "task", sessionId: agentUuid, uuid: "s1" }),
+        assistantLine({ text: "done", sessionId: agentUuid, uuid: "s2", parentUuid: "s1" }),
+        JSON.stringify({
+          type: "user",
+          uuid: "s3",
+          parentUuid: "s2",
+          sessionId: agentUuid,
+          timestamp: "2026-04-13T10:00:10Z",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu_sub", content: subWrapper },
+            ],
+          },
+        })
+      )
+    );
+
+    const session = new Session(parentPath);
+    const destDir = path.join(dir, "spill");
+    const result = await collectAndCopySpills(session, destDir);
+
+    // Both parent and subagent spills should be copied
+    expect(result.copied).toBe(2);
+    expect(existsSync(path.join(destDir, "parent.txt"))).toBe(true);
+    expect(existsSync(path.join(destDir, "sub.txt"))).toBe(true);
+    expect(readFileSync(path.join(destDir, "parent.txt"), "utf8")).toBe("parent spill content");
+    expect(readFileSync(path.join(destDir, "sub.txt"), "utf8")).toBe("sub spill content");
   });
 });
