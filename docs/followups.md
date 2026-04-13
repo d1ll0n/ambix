@@ -111,33 +111,13 @@ All Plan 3 followup items that were destined for this file were addressed in Pla
 
 ## Plan 4 (real runner)
 
-### Real runner undercounts distiller tokens (3× off)
+### Real runner's SDK-adapter tokens are advisory only
 
-Observed during the Haiku big-session comparison (2026-04-13, see `docs/haiku-big-session-comparison.md`):
+`RealAgentRunner.defaultQueryFn` reads token usage from `SDKResultMessage.usage`, which is NOT the aggregated multi-turn total — the haiku big-session run showed it undercounts by ~3x.
 
-- CLI reported: `distiller in=491 out=11,642`, cache fields undefined
-- Ground truth from the captured distiller session log: `in=1,305 out=36,541 cache_read=5,714,942 cache_write=308,940`
+**Workaround in place:** `src/orchestrate/run.ts` now computes authoritative distiller token usage by walking the captured distiller session log with parse-claude-logs' `Session` class (see `src/orchestrate/compute-distiller-usage.ts`). The SDK adapter's numbers are advisory; the log-derived numbers are what `RunResult.tokensUsed` carries.
 
-So the adapter is undercounting in by ~2.7×, out by ~3.1×, and dropping cache fields entirely. `RealAgentRunner.defaultQueryFn` in `src/agent/runner-real.ts` reads from `SDKResultMessage.usage` on the final `result` event — but that field is apparently the LAST-TURN usage, not the aggregated multi-turn total. The Task 1 SDK research noted:
-
-```typescript
-type SDKResultSuccess = {
-  usage: NonNullableUsage;              // ← we're reading this
-  modelUsage: Record<string, ModelUsage>; // ← probably what we want
-};
-
-type ModelUsage = {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadInputTokens: number;
-  cacheCreationInputTokens: number;
-  // ...
-};
-```
-
-**Fix:** read from `modelUsage` instead (or in addition to `usage`). Sum across all entries in `modelUsage` to handle mixed-model runs. Use camelCase field names. Add a regression test that checks the reported tokens match the sum across all assistant entries in the distiller log.
-
-Until this is fixed, the CLI's token output is informational only — use the captured distiller session log for authoritative numbers. See `docs/haiku-big-session-comparison.md` for the observed gap.
+**Followup (low priority):** fix the adapter anyway so it's less confusing when someone reads `runner-real.ts`. Likely need to pull from `modelUsage` instead of `usage`, using camelCase field names. Add a regression test that compares the adapter's output against a log-computed ground truth on the same run.
 
 ### Distiller log capture vs SDK async-write race
 
