@@ -50,6 +50,10 @@ describe("run end-to-end with mock runner", () => {
     expect(artifact.metadata.turn_count).toBe(2);
     expect(artifact.deterministic.tools).toBeDefined();
     expect(artifact.narrative.summary).toBeTruthy();
+
+    expect(result.tokensUsed).toBeDefined();
+    expect(result.sourceTokens).toBeDefined();
+    expect(result.sourceTokens!.in).toBeGreaterThanOrEqual(0);
   });
 
   it("cleans up the tmp directory on success", async () => {

@@ -9,6 +9,7 @@ import type { AgentRunner } from "../agent/types.js";
 import { resolveSessionPath } from "./resolve.js";
 import { persistArtifact } from "./persist.js";
 import { makeTmpWorkspace, cleanupTmpWorkspace } from "./tmp.js";
+import { captureDistillerLog } from "./distiller-log-capture.js";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
@@ -39,6 +40,12 @@ export interface RunResult {
   error?: string;
   /** Lint errors from the last distill attempt (if it failed that way). */
   lintErrors?: string[];
+  /** Token usage reported by the distiller runner. */
+  tokensUsed?: { in: number; out: number; cache_read?: number; cache_write?: number };
+  /** Token totals from the source session's deterministic analysis. */
+  sourceTokens?: { in: number; out: number; cache_read: number; cache_write: number };
+  /** Where the distiller's own session log was captured to. */
+  distillerLogDir?: string;
 }
 
 /**
@@ -71,12 +78,23 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       maxRetries: opts.maxRetries,
     });
 
+    // Capture distiller logs regardless of success/failure so we have
+    // them for debugging.
+    const capture = await captureDistillerLog({
+      tmpDir,
+      sessionId: session.sessionId,
+      outputRoot: opts.outputRoot,
+    });
+
     if (!distillResult.success) {
       return {
         success: false,
         tmpDir,
         error: distillResult.error,
         lintErrors: distillResult.lintErrors,
+        tokensUsed: distillResult.tokensUsed,
+        sourceTokens: deterministic.tokens.totals,
+        distillerLogDir: capture.destDir || undefined,
       };
     }
 
@@ -90,7 +108,14 @@ export async function run(opts: RunOptions): Promise<RunResult> {
 
     await cleanupTmpWorkspace(tmpDir, { keep: opts.keepTmp ?? false });
 
-    return { success: true, artifactPath, tmpDir };
+    return {
+      success: true,
+      artifactPath,
+      tmpDir,
+      tokensUsed: distillResult.tokensUsed,
+      sourceTokens: deterministic.tokens.totals,
+      distillerLogDir: capture.destDir || undefined,
+    };
   } catch (err) {
     // Retain tmp on any failure
     return {

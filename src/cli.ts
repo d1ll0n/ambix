@@ -121,6 +121,19 @@ async function runDistill(args: string[]): Promise<number> {
   }
 
   console.log(`artifact written to: ${result.artifactPath}`);
+  if (result.sourceTokens && result.tokensUsed) {
+    const src = result.sourceTokens;
+    const d = result.tokensUsed;
+    const srcTotal = src.in + src.out;
+    const dTotal = d.in + d.out;
+    const ratio = srcTotal > 0 ? (dTotal / srcTotal).toFixed(3) : "n/a";
+    console.log(`source session tokens: in=${src.in} out=${src.out} cache_read=${src.cache_read} cache_write=${src.cache_write}`);
+    console.log(`distiller tokens:      in=${d.in} out=${d.out}${d.cache_read != null ? ` cache_read=${d.cache_read}` : ""}${d.cache_write != null ? ` cache_write=${d.cache_write}` : ""}`);
+    console.log(`distiller total / source total = ${ratio}`);
+  }
+  if (result.distillerLogDir) {
+    console.log(`distiller session log captured at: ${result.distillerLogDir}`);
+  }
   return 0;
 }
 
