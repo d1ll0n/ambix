@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .alembic/
+docs/local-plans/plans/
+docs/local-plans/handoff.md
