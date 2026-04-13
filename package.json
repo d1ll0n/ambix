@@ -1,0 +1,25 @@
+{
+  "name": "alembic",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "alembic": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --experimental-strip-types src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "parse-claude-logs": "file:../parse-claude-logs"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
+  }
+}
