@@ -3,6 +3,7 @@
 import { Session } from "parse-claude-logs";
 import { stage } from "./stage/index.js";
 import { fileAt } from "./file-at.js";
+import { analyze } from "./analyze/index.js";
 
 async function main(argv: string[]): Promise<number> {
   const [, , subcommand, ...rest] = argv;
@@ -16,6 +17,8 @@ async function main(argv: string[]): Promise<number> {
       return runStage(rest);
     case "file-at":
       return runFileAt(rest);
+    case "analyze":
+      return runAnalyze(rest);
     case "--help":
     case "-h":
     case "help":
@@ -63,6 +66,19 @@ async function runFileAt(args: string[]): Promise<number> {
   return 0;
 }
 
+async function runAnalyze(args: string[]): Promise<number> {
+  const sessionArg = args[0];
+  if (!sessionArg) {
+    console.error("alembic analyze: missing <session-path>");
+    console.error("usage: alembic analyze <session-path>");
+    return 1;
+  }
+  const session = new Session(sessionArg);
+  const result = await analyze(session);
+  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  return 0;
+}
+
 function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
@@ -75,6 +91,7 @@ function printUsage(): void {
   console.error("subcommands:");
   console.error("  stage <session-path> [--tmp <dir>]   stage a session into a tmp dir");
   console.error("  file-at <path> <ix> [--tmp <dir>]    print a tracked file's content at a turn");
+  console.error("  analyze <session-path>                 print deterministic analysis JSON");
   console.error("  help                                  show this message");
 }
 

@@ -57,7 +57,7 @@ function stringifyErrorContent(content: unknown): string {
   if (Array.isArray(content)) {
     const texts: string[] = [];
     for (const b of content as ContentBlock[]) {
-      const anyB = b as Record<string, unknown>;
+      const anyB = b as unknown as Record<string, unknown>;
       if (anyB.type === "text" && typeof anyB.text === "string") {
         texts.push(anyB.text);
       }

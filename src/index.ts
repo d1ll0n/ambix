@@ -12,3 +12,19 @@ export type {
   SnapshotsIndex,
   StageLayout,
 } from "./types.js";
+
+export { analyze } from "./analyze/index.js";
+export type {
+  AnalyzeResult,
+  TokensSummary,
+  ModelTokens,
+  ToolsSummary,
+  FilesSummary,
+  FileRecord,
+  ChurnRecord,
+  BashCluster,
+  FailureRecord,
+  SubagentRecord,
+  SpillRecord,
+  PermissionEvent,
+} from "./analyze/index.js";
