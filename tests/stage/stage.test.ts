@@ -61,6 +61,52 @@ describe("stage", () => {
     expect(existsSync(path.join(layout.turnsDir, "00000.json"))).toBe(true);
   });
 
+  it("populates turns/ when truncation stubs are nested inside a tool_use input", async () => {
+    const big = "y".repeat(5000);
+    const text = joinLines(
+      assistantLine({
+        uuid: "a1",
+        contentBlocks: [
+          {
+            type: "tool_use",
+            id: "toolu_X",
+            name: "Edit",
+            input: { file_path: "src/big.ts", old_string: big, new_string: "ok" },
+          },
+        ],
+      })
+    );
+    const session = new Session(writeFixture(dir, "src.jsonl", text));
+
+    const tmpRoot = path.join(dir, "tmp");
+    const layout = await stage(session, tmpRoot);
+
+    // The stub is nested inside tool_use.input.old_string — if
+    // containsTruncationStub doesn't recurse into object fields, this
+    // entry won't be in truncatedIndices and the full-turn file won't
+    // be written. Regression guard for the smoke-test finding where
+    // turns/NNNNN.json was missing despite a stub ref pointing at it.
+    expect(layout.truncatedIndices).toEqual([0]);
+    expect(existsSync(path.join(layout.turnsDir, "00000.json"))).toBe(true);
+  });
+
+  it("populates turns/ when a text block's text field is truncated", async () => {
+    const big = "w".repeat(5000);
+    const text = joinLines(
+      assistantLine({
+        uuid: "a1",
+        contentBlocks: [{ type: "text", text: big }],
+      })
+    );
+    const session = new Session(writeFixture(dir, "src.jsonl", text));
+
+    const tmpRoot = path.join(dir, "tmp");
+    const layout = await stage(session, tmpRoot);
+
+    expect(layout.truncatedIndices).toEqual([0]);
+    expect(existsSync(path.join(layout.turnsDir, "00000.json"))).toBe(true);
+  });
+
   it("creates out/ and bin/ directories with a lint-output wrapper script", async () => {
     const text = joinLines(
       userLine({ text: "hello", uuid: "u1" }),

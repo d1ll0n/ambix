@@ -99,12 +99,15 @@ function containsTruncationStub(value: unknown): boolean {
   if (Array.isArray(value)) {
     for (const item of value) {
       if (containsTruncationStub(item)) return true;
-      if (item && typeof item === "object") {
-        const v = item as Record<string, unknown>;
-        if (v.input && typeof v.input === "object" && (v.input as { _truncated?: boolean })._truncated) return true;
-        if (v.result && containsTruncationStub(v.result)) return true;
-      }
     }
+    return false;
+  }
+  // Arbitrary object: recurse into every field so nested stubs (e.g. inside
+  // a tool_use.input, tool_result.content, or text block's text field) are
+  // detected. The old implementation only walked arrays + a hardcoded
+  // v.input / v.result pair, which missed all post-rewrite stub shapes.
+  for (const v of Object.values(value as Record<string, unknown>)) {
+    if (containsTruncationStub(v)) return true;
   }
   return false;
 }

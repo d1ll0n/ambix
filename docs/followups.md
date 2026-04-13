@@ -106,3 +106,18 @@ The "`git` was used 12 times" cluster understates variety. v2 could split by fir
 All Plan 3 followup items that were destined for this file were addressed in Plan 4:
 
 - **Real Anthropic/Claude Agent SDK runner** — Completed in Plan 4. `RealAgentRunner` ships in `src/agent/runner-real.ts`, wired as the CLI default. See `docs/plan-4-smoke-test-results.md`.
+
+---
+
+## Plan 4 (real runner)
+
+### `permissionMode` root-user workaround
+
+`src/agent/runner-real.ts` currently passes `permissionMode: "acceptEdits"` to the Agent SDK. This is a workaround: the more permissive `bypassPermissions` maps to `--dangerously-skip-permissions` in the underlying Claude CLI, which refuses to run when the process is root (observed during Plan 4 Task 4's first smoke attempt — opaque exit code 1 with no stderr).
+
+**Fix options:**
+- Detect root at runtime and emit a clear error telling the user to either run as non-root or accept `acceptEdits` mode.
+- Allow the caller to override `permissionMode` via `RealAgentRunnerOptions`.
+- Document the tradeoff in the README once alembic gains one.
+
+`acceptEdits` is fine for v1 because the distiller only needs Read/Glob/Grep/Bash/Write and all writes are inside the tmp dir, but the silent failure mode is a sharp edge worth fixing before alembic leaves the sandbox.
