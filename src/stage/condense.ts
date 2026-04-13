@@ -11,12 +11,19 @@ import {
   isSystemEntry,
   isSummaryEntry,
   isAttachmentEntry,
+  isFileHistorySnapshotEntry,
+  isQueueOperationEntry,
+  isPermissionModeEntry,
+  isProgressEntry,
+  isLastPromptEntry,
   isToolUseBlock,
   isToolResultBlock,
+  isTextBlock,
+  isThinkingBlock,
+  isImageBlock,
   parsePersistedOutput,
 } from "parse-claude-logs";
 import type { CondensedEntry, RehydrationStub } from "../types.js";
-import { makePreview } from "./preview.js";
 
 /** Options controlling condensation. */
 export interface CondenseOptions {
@@ -25,6 +32,21 @@ export interface CondenseOptions {
   /** Preview length for truncated content. */
   previewChars?: number;
 }
+
+// Metadata fields to strip from non-message entry payloads.
+const METADATA_KEYS = new Set([
+  "uuid",
+  "parentUuid",
+  "timestamp",
+  "sessionId",
+  "type",
+  "cwd",
+  "gitBranch",
+  "version",
+  "isSidechain",
+  "userType",
+  "agentId",
+]);
 
 /** Convert LogEntry[] into the condensed format with truncation stubs. */
 export function condenseEntries(
@@ -61,7 +83,7 @@ function condenseOne(
     role: roleOf(entry),
     type: entry.type,
     ts,
-    content: condenseContent(entry, ix, opts),
+    content: extractContent(entry, ix, opts),
   };
 
   if (isAssistantEntry(entry)) {
@@ -83,30 +105,42 @@ function roleOf(entry: LogEntry): CondensedEntry["role"] {
   return "other";
 }
 
-function condenseContent(entry: LogEntry, ix: number, opts: CondenseOptions): unknown {
+/** Content extraction — dispatches by entry type. */
+function extractContent(entry: LogEntry, ix: number, opts: CondenseOptions): unknown {
   if (isUserEntry(entry)) {
     const e = entry as UserEntry;
     if (typeof e.message.content === "string") {
-      return maybeTruncateString(e.message.content, ix, opts);
+      return maybeStub(e.message.content, ix, opts);
     }
     return e.message.content.map((b) => condenseBlock(b, ix, opts));
   }
+
   if (isAssistantEntry(entry)) {
     const e = entry as AssistantEntry;
     return e.message.content.map((b) => condenseBlock(b, ix, opts));
   }
-  if (isSystemEntry(entry)) {
-    return entry.content ?? null;
-  }
-  if (isSummaryEntry(entry)) {
-    return entry.summary;
-  }
-  if (isAttachmentEntry(entry)) {
-    return entry.attachment;
-  }
-  return null;
+
+  // All other known and unknown entry types: preserve payload minus metadata fields.
+  return preservedEntryPayload(entry);
 }
 
+/**
+ * Shallow copy of the source entry with common metadata fields stripped.
+ * Used for system, summary, attachment, file-history-snapshot, queue-operation,
+ * permission-mode, progress, last-prompt, and unknown entries.
+ */
+function preservedEntryPayload(entry: LogEntry): Record<string, unknown> {
+  const raw = entry as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!METADATA_KEYS.has(k)) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+/** Block-level condensation for user/assistant content arrays. */
 function condenseBlock(block: ContentBlock, ix: number, opts: CondenseOptions): unknown {
   if (isToolUseBlock(block)) {
     return {
@@ -116,21 +150,42 @@ function condenseBlock(block: ContentBlock, ix: number, opts: CondenseOptions): 
       input: condenseToolInput(block.input, ix, opts),
     };
   }
+
   if (isToolResultBlock(block)) {
-    return {
+    const result: Record<string, unknown> = {
       type: "tool_result",
       tool_use_id: block.tool_use_id,
-      result: condenseToolResultContent(block.content, opts),
+      result: condenseToolResultContent(block.content, ix, opts),
     };
+    if (block.is_error) {
+      result.is_error = true;
+    }
+    return result;
   }
-  // Text/thinking/image: pass through, but truncate large text
-  const anyBlock = block as unknown as Record<string, unknown>;
-  if (anyBlock.type === "text" && typeof anyBlock.text === "string") {
-    return { type: "text", text: maybeTruncateString(anyBlock.text, ix, opts) };
+
+  if (isTextBlock(block)) {
+    return { type: "text", text: maybeStub(block.text, ix, opts) };
   }
+
+  if (isThinkingBlock(block)) {
+    const out: Record<string, unknown> = {
+      type: "thinking",
+      thinking: maybeStub(block.thinking, ix, opts),
+    };
+    if ((block as { signature?: string }).signature !== undefined) {
+      out.signature = (block as { signature?: string }).signature;
+    }
+    return out;
+  }
+
+  // image blocks and unknown blocks pass through unchanged
   return block;
 }
 
+/**
+ * Per-field truncation for tool_use inputs.
+ * Small fields stay inline; large string fields become stubs.
+ */
 function condenseToolInput(
   input: unknown,
   ix: number,
@@ -138,88 +193,88 @@ function condenseToolInput(
 ): unknown {
   if (input === null || typeof input !== "object") return input;
   const out: Record<string, unknown> = {};
-  let truncatedAny = false;
   for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
     if (typeof v === "string" && byteLength(v) > opts.maxInlineBytes) {
-      truncatedAny = true;
-      out[k] = "<<truncated>>";
+      out[k] = makeStub(
+        `turns/${String(ix).padStart(5, "0")}.json`,
+        v,
+        v.slice(0, opts.previewChars ?? 500),
+        opts
+      );
     } else {
       out[k] = v;
     }
   }
-  if (truncatedAny) {
-    out._truncated = true;
-    out._ref = `turns/${String(ix).padStart(5, "0")}.json`;
-    out._bytes = byteLength(JSON.stringify(input));
-    out._tokens_est = estTokens(out._bytes as number);
-    out._preview = makePreview(input, opts.previewChars ?? 500);
-  }
   return out;
 }
 
+/**
+ * Tool_result content condensation.
+ * Handles string (with persisted-output detection), arrays, and other values.
+ */
 function condenseToolResultContent(
   content: unknown,
+  ix: number,
   opts: CondenseOptions
 ): unknown {
-  // String tool_result content may be a <persisted-output> wrapper
   if (typeof content === "string") {
     const persisted = parsePersistedOutput(content);
     if (persisted) {
       const fileName = persisted.filePath.split("/").pop() ?? "spill.txt";
+      const bytes = byteLength(content);
       return {
         truncated: true,
         ref: `spill/${fileName}`,
-        bytes: byteLength(content),
-        tokens_est: estTokens(byteLength(content)),
+        bytes,
+        tokens_est: estTokens(bytes),
         preview: persisted.preview,
       } satisfies RehydrationStub;
     }
     if (byteLength(content) > opts.maxInlineBytes) {
-      return inlineStringStub(content, opts);
+      return makeStub(
+        `turns/${String(ix).padStart(5, "0")}.json`,
+        content,
+        content.slice(0, opts.previewChars ?? 500),
+        opts
+      );
     }
     return content;
   }
-  // Array of content blocks — leave structure, truncate any large text blocks
+
   if (Array.isArray(content)) {
-    return content.map((b) => {
-      const anyB = b as Record<string, unknown>;
-      if (anyB.type === "text" && typeof anyB.text === "string" && byteLength(anyB.text) > opts.maxInlineBytes) {
-        return { type: "text", text: inlineStringStub(anyB.text, opts) };
-      }
-      return b;
-    });
+    return (content as ContentBlock[]).map((b) => condenseBlock(b, ix, opts));
   }
+
   return content;
 }
 
-function maybeTruncateString(text: string, ix: number, opts: CondenseOptions): unknown {
-  if (byteLength(text) <= opts.maxInlineBytes) return text;
-  return {
-    truncated: true,
-    ref: `turns/${String(ix).padStart(5, "0")}.json`,
-    bytes: byteLength(text),
-    tokens_est: estTokens(byteLength(text)),
-    preview: makePreview(text, opts.previewChars ?? 500),
-  } satisfies RehydrationStub;
+/** String → string or stub. Used for text blocks, thinking blocks, user string content. */
+function maybeStub(value: unknown, ix: number, opts: CondenseOptions): unknown {
+  if (typeof value !== "string") return value;
+  if (byteLength(value) <= opts.maxInlineBytes) return value;
+  return makeStub(
+    `turns/${String(ix).padStart(5, "0")}.json`,
+    value,
+    value.slice(0, opts.previewChars ?? 500),
+    opts
+  );
 }
 
-function inlineStringStub(text: string, opts: CondenseOptions): RehydrationStub {
+/** Build a uniform RehydrationStub. */
+function makeStub(
+  ref: string,
+  full: string,
+  preview: string,
+  _opts: CondenseOptions
+): RehydrationStub {
+  const bytes = byteLength(full);
   return {
     truncated: true,
-    ref: "(inline)",
-    bytes: byteLength(text),
-    tokens_est: estTokens(byteLength(text)),
-    preview: makePreview(text, opts.previewChars ?? 500),
+    ref,
+    bytes,
+    tokens_est: estTokens(bytes),
+    preview,
   };
-}
-
-function byteLength(s: string): number {
-  return Buffer.byteLength(s, "utf8");
-}
-
-function estTokens(bytes: number): number {
-  // Rough estimate: ~4 bytes per token.
-  return Math.round(bytes / 4);
 }
 
 function extractTokens(entry: AssistantEntry): CondensedEntry["tokens"] {
@@ -231,4 +286,12 @@ function extractTokens(entry: AssistantEntry): CondensedEntry["tokens"] {
   if (u.cache_read_input_tokens !== undefined) tokens.cache_read = u.cache_read_input_tokens;
   if (u.cache_creation_input_tokens !== undefined) tokens.cache_write = u.cache_creation_input_tokens;
   return tokens;
+}
+
+function byteLength(s: string): number {
+  return Buffer.byteLength(s, "utf8");
+}
+
+function estTokens(bytes: number): number {
+  return Math.round(bytes / 4);
 }

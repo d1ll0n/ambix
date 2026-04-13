@@ -113,7 +113,7 @@ describe("condenseEntries — truncation", () => {
     expect(content.preview.length).toBeGreaterThan(0);
   });
 
-  it("replaces large tool_use input fields with a stub but keeps the wrapper", async () => {
+  it("replaces large tool_use input string fields with per-field stubs, keeping small fields inline", async () => {
     const big = "y".repeat(5000);
     const text = joinLines(
       assistantLine({
@@ -133,12 +133,24 @@ describe("condenseEntries — truncation", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 100 });
     const blocks = result[0].content as Array<Record<string, unknown>>;
-    expect(blocks).toHaveLength(1);
-    const tu = blocks[0] as { type: string; id: string; name: string; input: { _truncated?: boolean } };
+    const tu = blocks[0] as { type: string; id: string; name: string; input: Record<string, unknown> };
+
     expect(tu.type).toBe("tool_use");
     expect(tu.id).toBe("toolu_X");
     expect(tu.name).toBe("Edit");
-    expect(tu.input._truncated).toBe(true);
+
+    // Small fields stay inline
+    expect(tu.input.file_path).toBe("src/big.ts");
+    expect(tu.input.new_string).toBe("ok");
+
+    // Large field becomes a stub
+    const oldStub = tu.input.old_string as { truncated: boolean; ref: string; bytes: number; tokens_est: number; preview: string };
+    expect(oldStub.truncated).toBe(true);
+    expect(oldStub.ref).toBe("turns/00000.json");
+    expect(oldStub.bytes).toBeGreaterThan(100);
+    expect(oldStub.preview.length).toBeGreaterThan(0);
+    // Preview should contain the actual character(s) from the original
+    expect(oldStub.preview.startsWith("y")).toBe(true);
   });
 
   it("replaces persisted-output tool_results with a spill stub", async () => {
@@ -172,5 +184,114 @@ describe("condenseEntries — truncation", () => {
     expect(tr.result.truncated).toBe(true);
     expect(tr.result.ref).toBe("spill/toolu_X.json");
     expect(tr.result.preview).toContain("first few lines");
+  });
+});
+
+describe("condenseEntries — non-message entry preservation", () => {
+  let dir: string;
+  beforeEach(() => { dir = makeTempDir(); });
+  afterEach(() => { cleanupTempDir(dir); });
+
+  it("preserves permission-mode entry payload in content", async () => {
+    const text = joinLines(
+      JSON.stringify({
+        type: "permission-mode",
+        sessionId: "session-test",
+        permissionMode: "bypassPermissions",
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 10000 });
+    expect(result[0].type).toBe("permission-mode");
+    expect(result[0].content).toEqual({ permissionMode: "bypassPermissions" });
+  });
+
+  it("preserves file-history-snapshot entry payload", async () => {
+    const snapshot = {
+      messageId: "msg_1",
+      timestamp: "2026-04-13T10:00:00Z",
+      trackedFileBackups: {
+        "src/foo.ts": { backupFileName: "abc@v1", version: 1, backupTime: "2026-04-13T10:00:00Z" },
+      },
+    };
+    const text = joinLines(
+      JSON.stringify({
+        type: "file-history-snapshot",
+        messageId: "msg_1",
+        snapshot,
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 10000 });
+    expect(result[0].type).toBe("file-history-snapshot");
+    const content = result[0].content as { messageId: string; snapshot: typeof snapshot };
+    expect(content.messageId).toBe("msg_1");
+    expect(content.snapshot).toEqual(snapshot);
+  });
+
+  it("preserves last-prompt entry payload", async () => {
+    const text = joinLines(
+      JSON.stringify({
+        type: "last-prompt",
+        sessionId: "session-test",
+        lastPrompt: "hello there",
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 10000 });
+    expect(result[0].type).toBe("last-prompt");
+    expect(result[0].content).toEqual({ lastPrompt: "hello there" });
+  });
+});
+
+describe("condenseEntries — block-field truncation details", () => {
+  let dir: string;
+  beforeEach(() => { dir = makeTempDir(); });
+  afterEach(() => { cleanupTempDir(dir); });
+
+  it("replaces a text block's text field with a stub when too large, keeping the block wrapper", async () => {
+    const big = "z".repeat(5000);
+    const text = joinLines(
+      assistantLine({
+        contentBlocks: [{ type: "text", text: big }],
+        uuid: "a1",
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 100 });
+    const blocks = result[0].content as Array<Record<string, unknown>>;
+    const tb = blocks[0] as { type: string; text: { truncated: boolean; ref: string; preview: string } };
+
+    expect(tb.type).toBe("text");
+    expect(tb.text.truncated).toBe(true);
+    expect(tb.text.ref).toBe("turns/00000.json");
+    expect(tb.text.preview.length).toBeGreaterThan(0);
+    expect(tb.text.preview.startsWith("z")).toBe(true);
+  });
+
+  it("keeps image blocks unchanged regardless of size", async () => {
+    const text = joinLines(
+      assistantLine({
+        contentBlocks: [
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo..." } },
+        ],
+        uuid: "a1",
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const result = condenseEntries(entries, { maxInlineBytes: 100 });
+    const blocks = result[0].content as Array<Record<string, unknown>>;
+    expect(blocks[0].type).toBe("image");
+    expect((blocks[0] as { source: { type: string } }).source).toBeDefined();
   });
 });
