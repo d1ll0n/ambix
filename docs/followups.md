@@ -31,17 +31,9 @@ During Plan 1 Task 10, the Task 10 subagent couldn't import `defaultFileHistoryD
 
 ## Plan 1 (staging + file-at)
 
-### Subagent linkage is absent in the parent condensed log
+### Optional sidecar linkage for Task tool_use → subagent session
 
-The parent's condensed `session.jsonl` emits ordinary `Task` tool_use blocks; it does NOT yet insert `subagent_call` stubs pointing at the staged subagent directories. The agent has to discover subagents by globbing `subagents/*/session.jsonl`.
-
-**Fix:** inject a `subagent_call` stub alongside or in place of each `Task` tool_use during condensation, with `ref` pointing at `subagents/<agent-name>/session.jsonl` and the `agent_id` resolved via temporal ordering. Plan 2 already computes the ordinal-based cross-reference in `src/analyze/subagents.ts` — reuse it from the staging pass.
-
-### `_truncated` field encoding on tool_use inputs
-
-When a tool_use's input is too large, `src/stage/condense.ts` keeps the original wrapper but replaces truncated string fields with `"<<truncated>>"` placeholders and adds sibling metadata keys prefixed with `_`. This is good enough for the agent to recognize and rehydrate via `Read turns/NNNNN.json`, but the encoding conflates data with metadata.
-
-**Fix (maybe):** move the truncation metadata to a sibling `_meta` object on the tool_use instead of polluting the input itself. Requires updating the distiller agent's system prompt to look there.
+Parent `Task` tool_use blocks are preserved in the condensed log (correct behavior — we keep all blocks). The distiller agent currently discovers staged subagents by globbing `subagents/*/session.jsonl` and correlating by reading. A lightweight optimization would be to emit a sibling annotation next to each `Task` block (or at entry level) with a resolved `subagents/<agent-name>/session.jsonl` reference. Not blocking — glob-based discovery is fine for v1.
 
 ### `bytes` field always null in snapshots index
 
