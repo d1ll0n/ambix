@@ -6,6 +6,7 @@ import { fileAt } from "./file-at.js";
 import { analyze } from "./analyze/index.js";
 import { run } from "./orchestrate/run.js";
 import { MockAgentRunner } from "./agent/runner-mock.js";
+import { RealAgentRunner } from "./agent/runner-real.js";
 
 async function main(argv: string[]): Promise<number> {
   const [, , subcommand, ...rest] = argv;
@@ -87,26 +88,24 @@ async function runDistill(args: string[]): Promise<number> {
   const sessionArg = args[0];
   if (!sessionArg) {
     console.error("alembic distill: missing <session-path>");
-    console.error("usage: alembic distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock]");
+    console.error("usage: alembic distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]");
     return 1;
   }
   const outputRoot = parseFlag(args, "--output");
   const tmpRoot = parseFlag(args, "--tmp-root");
   const keepTmp = args.includes("--keep-tmp");
   const useMock = args.includes("--mock");
+  const model = parseFlag(args, "--model");
 
-  if (!useMock) {
-    console.error("alembic distill: the real Anthropic runner is not yet implemented.");
-    console.error("Pass --mock to exercise the pipeline with the placeholder narrative.");
-    console.error("See docs/followups.md for the real-runner task.");
-    return 1;
-  }
+  const runner = useMock
+    ? new MockAgentRunner()
+    : new RealAgentRunner({ model });
 
   const result = await run({
     session: sessionArg,
     outputRoot,
     tmpRoot,
-    runner: new MockAgentRunner(),
+    runner,
     keepTmp,
   });
 
@@ -138,8 +137,8 @@ function printUsage(): void {
   console.error("  stage <session-path> [--tmp <dir>]   stage a session into a tmp dir");
   console.error("  file-at <path> <ix> [--tmp <dir>]    print a tracked file's content at a turn");
   console.error("  analyze <session-path>                 print deterministic analysis JSON");
-  console.error("  distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock]");
-  console.error("                                          run the full pipeline (mock runner only in v1)");
+  console.error("  distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]");
+  console.error("                                          run the full pipeline (real runner by default; --mock for placeholder)");
   console.error("  help                                  show this message");
 }
 

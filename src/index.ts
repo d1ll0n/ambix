@@ -53,3 +53,5 @@ export type { PersistOptions } from "./orchestrate/persist.js";
 export { resolveSessionPath } from "./orchestrate/resolve.js";
 export { buildSystemPrompt } from "./agent/system-prompt.js";
 export { lintNarrative } from "./agent/lint.js";
+export { RealAgentRunner } from "./agent/runner-real.js";
+export type { RealAgentRunnerOptions, QueryFn, QueryFnOptions, StreamedAgentMessage } from "./agent/runner-real.js";
