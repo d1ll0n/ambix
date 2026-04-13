@@ -124,7 +124,7 @@ function condenseBlock(block: ContentBlock, ix: number, opts: CondenseOptions): 
     };
   }
   // Text/thinking/image: pass through, but truncate large text
-  const anyBlock = block as Record<string, unknown>;
+  const anyBlock = block as unknown as Record<string, unknown>;
   if (anyBlock.type === "text" && typeof anyBlock.text === "string") {
     return { type: "text", text: maybeTruncateString(anyBlock.text, ix, opts) };
   }
