@@ -111,13 +111,33 @@ All Plan 3 followup items that were destined for this file were addressed in Pla
 
 ## Plan 4 (real runner)
 
-### Real runner doesn't report its own cache tokens
+### Real runner undercounts distiller tokens (3× off)
 
-`RealAgentRunner.defaultQueryFn` in `src/agent/runner-real.ts` maps the SDK's `result.usage` fields by reading `cache_read_input_tokens` and `cache_creation_input_tokens`. The Task 1 research noted the SDK's per-model usage shape (`ModelUsage`) uses camelCase (`cacheReadInputTokens` / `cacheCreationInputTokens`), and the aggregate `SDKResultMessage.usage` may do the same or differ.
+Observed during the Haiku big-session comparison (2026-04-13, see `docs/haiku-big-session-comparison.md`):
 
-Observed during the token-comparison run (2026-04-13, see `docs/token-comparison.md`): distiller `tokensUsed.cache_read` and `cache_write` were both `undefined`. Without cache numbers we can only estimate dollar cost from raw in+out, which undercounts if the distiller benefited from prompt cache.
+- CLI reported: `distiller in=491 out=11,642`, cache fields undefined
+- Ground truth from the captured distiller session log: `in=1,305 out=36,541 cache_read=5,714,942 cache_write=308,940`
 
-**Fix:** inspect a real `SDKResultMessage.usage` object at runtime (add a `console.error(JSON.stringify(r.usage))` temporarily, run once) and update the field names in `defaultQueryFn`. Consider also pulling the per-model breakdown from `r.modelUsage` if the top-level usage doesn't carry cache fields.
+So the adapter is undercounting in by ~2.7×, out by ~3.1×, and dropping cache fields entirely. `RealAgentRunner.defaultQueryFn` in `src/agent/runner-real.ts` reads from `SDKResultMessage.usage` on the final `result` event — but that field is apparently the LAST-TURN usage, not the aggregated multi-turn total. The Task 1 SDK research noted:
+
+```typescript
+type SDKResultSuccess = {
+  usage: NonNullableUsage;              // ← we're reading this
+  modelUsage: Record<string, ModelUsage>; // ← probably what we want
+};
+
+type ModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadInputTokens: number;
+  cacheCreationInputTokens: number;
+  // ...
+};
+```
+
+**Fix:** read from `modelUsage` instead (or in addition to `usage`). Sum across all entries in `modelUsage` to handle mixed-model runs. Use camelCase field names. Add a regression test that checks the reported tokens match the sum across all assistant entries in the distiller log.
+
+Until this is fixed, the CLI's token output is informational only — use the captured distiller session log for authoritative numbers. See `docs/haiku-big-session-comparison.md` for the observed gap.
 
 ### Distiller log capture vs SDK async-write race
 
