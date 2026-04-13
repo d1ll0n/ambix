@@ -98,3 +98,11 @@ First-token clustering catches things like `DEBUG=1 ls` as the cluster `DEBUG=1`
 The "`git` was used 12 times" cluster understates variety. v2 could split by first-two-tokens (e.g. `git log` vs `git status`), but detecting subcommands is non-trivial (`git log` vs `git -C path log`, `npm run build` vs `npm test`).
 
 **Fix:** decide whether the distiller agent actually wants finer granularity before doing the work. If the distiller's narrative is citing "git was used 12 times" without needing the subcommand detail, leave it.
+
+---
+
+## Plan 3 (orchestration + mock runner)
+
+All Plan 3 followup items that were destined for this file were addressed in Plan 4:
+
+- **Real Anthropic/Claude Agent SDK runner** — Completed in Plan 4. `RealAgentRunner` ships in `src/agent/runner-real.ts`, wired as the CLI default. See `docs/plan-4-smoke-test-results.md`.
