@@ -112,3 +112,61 @@ export function assistantLine(opts: {
 export function joinLines(...lines: string[]): string {
   return lines.join("\n") + "\n";
 }
+
+/**
+ * Produce an assistant JSONL line containing a single tool_use block.
+ * Convenience wrapper over `assistantLine` with `contentBlocks`.
+ */
+export function toolUseAssistantLine(opts: {
+  name: string;
+  input: Record<string, unknown>;
+  toolUseId?: string;
+  uuid?: string;
+  parentUuid?: string | null;
+  sessionId?: string;
+  ts?: string;
+  model?: string;
+}): string {
+  const { name, input, toolUseId = `toolu_${Math.random().toString(36).slice(2, 10)}` } = opts;
+  return assistantLine({
+    uuid: opts.uuid,
+    parentUuid: opts.parentUuid,
+    sessionId: opts.sessionId,
+    ts: opts.ts,
+    model: opts.model,
+    contentBlocks: [{ type: "tool_use", id: toolUseId, name, input }],
+  });
+}
+
+/**
+ * Produce a user JSONL line containing a single tool_result block.
+ * Useful for pairing with `toolUseAssistantLine`.
+ */
+export function toolResultUserLine(opts: {
+  toolUseId: string;
+  content: unknown;
+  isError?: boolean;
+  uuid?: string;
+  parentUuid?: string | null;
+  sessionId?: string;
+  ts?: string;
+}): string {
+  return JSON.stringify({
+    type: "user",
+    uuid: opts.uuid ?? `u-${Math.random().toString(36).slice(2, 10)}`,
+    parentUuid: opts.parentUuid ?? null,
+    sessionId: opts.sessionId ?? "session-test",
+    timestamp: opts.ts ?? "2026-04-13T10:00:00Z",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: opts.toolUseId,
+          content: opts.content,
+          is_error: opts.isError ?? false,
+        },
+      ],
+    },
+  });
+}
