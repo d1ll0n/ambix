@@ -111,6 +111,26 @@ All Plan 3 followup items that were destined for this file were addressed in Pla
 
 ## Plan 4 (real runner)
 
+### Real runner doesn't report its own cache tokens
+
+`RealAgentRunner.defaultQueryFn` in `src/agent/runner-real.ts` maps the SDK's `result.usage` fields by reading `cache_read_input_tokens` and `cache_creation_input_tokens`. The Task 1 research noted the SDK's per-model usage shape (`ModelUsage`) uses camelCase (`cacheReadInputTokens` / `cacheCreationInputTokens`), and the aggregate `SDKResultMessage.usage` may do the same or differ.
+
+Observed during the token-comparison run (2026-04-13, see `docs/token-comparison.md`): distiller `tokensUsed.cache_read` and `cache_write` were both `undefined`. Without cache numbers we can only estimate dollar cost from raw in+out, which undercounts if the distiller benefited from prompt cache.
+
+**Fix:** inspect a real `SDKResultMessage.usage` object at runtime (add a `console.error(JSON.stringify(r.usage))` temporarily, run once) and update the field names in `defaultQueryFn`. Consider also pulling the per-model breakdown from `r.modelUsage` if the top-level usage doesn't carry cache fields.
+
+### Distiller log capture vs SDK async-write race
+
+`src/orchestrate/distiller-log-capture.ts` runs immediately after the distill completes, but the Agent SDK keeps writing to the CC project dir asynchronously after the query stream ends. Observed during the verification run: the main distiller session file was captured, but a second `.jsonl` (~61 lines of `queue-operation` + `attachment` entries) was flushed AFTER the capture window closed and remained in the CC project dir as an orphan.
+
+Impact: a subsequent `alembic distill` run could pick up the orphan file as a candidate session if it ran discovery over `~/.claude/projects/`. For v1 we don't do UUID discovery from that dir, so the immediate risk is low, but the orphan files accumulate.
+
+**Fix options:**
+- Add a small delay (e.g. 1-2 seconds) before capture runs, giving the SDK time to flush
+- Call capture twice — once immediately, once after a delay — and merge results
+- Configure the SDK to not persist its session log at all (if `persistSession: false` or similar works)
+- Run capture in a loop, polling every 500ms until no new files appear, then giving up after a timeout
+
 ### `permissionMode` root-user workaround
 
 `src/agent/runner-real.ts` currently passes `permissionMode: "acceptEdits"` to the Agent SDK. This is a workaround: the more permissive `bypassPermissions` maps to `--dangerously-skip-permissions` in the underlying Claude CLI, which refuses to run when the process is root (observed during Plan 4 Task 4's first smoke attempt — opaque exit code 1 with no stderr).
