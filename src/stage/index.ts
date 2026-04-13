@@ -1,8 +1,8 @@
 // src/stage/index.ts
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import type { Session } from "parse-claude-logs";
+import { defaultFileHistoryDir } from "parse-claude-logs";
 import type { StageLayout } from "../types.js";
 import { buildMetadata } from "./metadata.js";
 import { condenseEntries } from "./condense.js";
@@ -62,7 +62,7 @@ export async function stage(
   await stageFileHistory(
     session,
     fileHistoryDir,
-    opts.fileHistoryBaseDir ?? path.join(os.homedir(), ".claude", "file-history")
+    opts.fileHistoryBaseDir ?? defaultFileHistoryDir()
   );
 
   // 6. Subagents
