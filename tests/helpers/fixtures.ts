@@ -27,6 +27,18 @@ function nextId(): string {
   return `00000000-0000-0000-0000-${counter.toString().padStart(12, "0")}`;
 }
 
+// Request IDs advance independently of uuids so tests that pass explicit
+// uuids still get unique requestIds. Sharing a requestId across two
+// distinct assistant turns triggers parse-claude-logs' streaming dedupe
+// (which collapses partial-message rolls into their final form) and
+// silently drops entries — a footgun when constructing multi-turn
+// fixtures by hand.
+let requestCounter = 0;
+function nextRequestId(): string {
+  requestCounter++;
+  return `req-${requestCounter}`;
+}
+
 export function userLine(opts: {
   text?: string;
   uuid?: string;
@@ -84,7 +96,7 @@ export function assistantLine(opts: {
     outputTokens = 5,
     cacheReadTokens = 0,
     contentBlocks,
-    requestId = `req_${counter}`,
+    requestId = nextRequestId(),
   } = opts;
   return JSON.stringify({
     type: "assistant",
