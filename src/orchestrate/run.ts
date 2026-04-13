@@ -1,0 +1,102 @@
+// src/orchestrate/run.ts
+import { Session } from "parse-claude-logs";
+import { stage } from "../stage/index.js";
+import { analyze } from "../analyze/index.js";
+import { buildMetadata } from "../stage/metadata.js";
+import { distill } from "../agent/distill.js";
+import { mergeArtifact } from "../artifact/merge.js";
+import type { AgentRunner } from "../agent/types.js";
+import { resolveSessionPath } from "./resolve.js";
+import { persistArtifact } from "./persist.js";
+import { makeTmpWorkspace, cleanupTmpWorkspace } from "./tmp.js";
+import path from "node:path";
+import { tmpdir } from "node:os";
+
+/** Options for the top-level run. */
+export interface RunOptions {
+  /** Session argument: an absolute path or path relative to cwd. */
+  session: string;
+  /** Output root. Default ~/.alembic. */
+  outputRoot?: string;
+  /** Tmp workspace root. Default $TMPDIR/alembic. */
+  tmpRoot?: string;
+  /** Agent runner to use. Required. */
+  runner: AgentRunner;
+  /** Keep tmp dir on success. Default false. Always keeps on failure. */
+  keepTmp?: boolean;
+  /** Max distill retries. Default 2. */
+  maxRetries?: number;
+}
+
+/** Result of a top-level run. */
+export interface RunResult {
+  success: boolean;
+  /** Final artifact path (on success). */
+  artifactPath?: string;
+  /** Tmp dir used (set whether success or failure). */
+  tmpDir?: string;
+  /** Error message (failure only). */
+  error?: string;
+  /** Lint errors from the last distill attempt (if it failed that way). */
+  lintErrors?: string[];
+}
+
+/**
+ * Run the full alembic pipeline against a session:
+ *   1. Resolve the session path
+ *   2. Stage into a tmp dir
+ *   3. Analyze deterministically
+ *   4. Distill via the agent runner (with lint-gate retry)
+ *   5. Merge + persist the artifact
+ *   6. Clean up tmp (if success and !keepTmp)
+ */
+export async function run(opts: RunOptions): Promise<RunResult> {
+  const sessionPath = await resolveSessionPath(opts.session);
+  const session = new Session(sessionPath);
+
+  // Prime session metadata so we know the session id for tmp naming
+  await session.messages();
+
+  const tmpRoot = opts.tmpRoot ?? path.join(tmpdir(), "alembic");
+  const tmpDir = await makeTmpWorkspace({ root: tmpRoot, sessionId: session.sessionId });
+
+  try {
+    await stage(session, tmpDir);
+    const metadata = await buildMetadata(session);
+    const deterministic = await analyze(session);
+
+    const distillResult = await distill({
+      tmpDir,
+      runner: opts.runner,
+      maxRetries: opts.maxRetries,
+    });
+
+    if (!distillResult.success) {
+      return {
+        success: false,
+        tmpDir,
+        error: distillResult.error,
+        lintErrors: distillResult.lintErrors,
+      };
+    }
+
+    const artifact = await mergeArtifact.fromPaths({
+      metadata,
+      deterministic,
+      narrativePath: path.join(tmpDir, "out", "narrative.json"),
+    });
+
+    const artifactPath = await persistArtifact(artifact, { outputRoot: opts.outputRoot });
+
+    await cleanupTmpWorkspace(tmpDir, { keep: opts.keepTmp ?? false });
+
+    return { success: true, artifactPath, tmpDir };
+  } catch (err) {
+    // Retain tmp on any failure
+    return {
+      success: false,
+      tmpDir,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
