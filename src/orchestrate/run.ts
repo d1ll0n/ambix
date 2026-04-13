@@ -10,6 +10,7 @@ import { resolveSessionPath } from "./resolve.js";
 import { persistArtifact } from "./persist.js";
 import { makeTmpWorkspace, cleanupTmpWorkspace } from "./tmp.js";
 import { captureDistillerLog } from "./distiller-log-capture.js";
+import { computeDistillerUsageFromLog } from "./compute-distiller-usage.js";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
@@ -86,13 +87,21 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       outputRoot: opts.outputRoot,
     });
 
+    // Compute authoritative distiller token usage from the captured
+    // log (the SDK adapter's numbers are unreliable — undercounts
+    // by ~3x. See docs/followups.md).
+    const authoritativeTokens = capture.destDir
+      ? await computeDistillerUsageFromLog(capture.destDir)
+      : null;
+    const tokensUsed = authoritativeTokens ?? distillResult.tokensUsed;
+
     if (!distillResult.success) {
       return {
         success: false,
         tmpDir,
         error: distillResult.error,
         lintErrors: distillResult.lintErrors,
-        tokensUsed: distillResult.tokensUsed,
+        tokensUsed,
         sourceTokens: deterministic.tokens.totals,
         distillerLogDir: capture.destDir || undefined,
       };
@@ -112,7 +121,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       success: true,
       artifactPath,
       tmpDir,
-      tokensUsed: distillResult.tokensUsed,
+      tokensUsed,
       sourceTokens: deterministic.tokens.totals,
       distillerLogDir: capture.destDir || undefined,
     };
