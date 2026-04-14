@@ -1,4 +1,5 @@
 // src/agent/system-prompt.ts
+import { buildTreeView } from "./tree-view.js";
 
 /** Options for building the distiller system prompt. */
 export interface BuildPromptOptions {
@@ -10,10 +11,13 @@ export interface BuildPromptOptions {
  * the role, goal, tmp directory layout, rehydration guidance,
  * narrative schema, and verification requirement.
  */
-export function buildSystemPrompt(opts: BuildPromptOptions): string {
+export async function buildSystemPrompt(opts: BuildPromptOptions): Promise<string> {
+  const tree = await buildTreeView(opts.tmpDir);
   return `You are a session distiller. Your goal is to read a completed Claude Code session log and produce a structured JSON narrative summarizing what happened, what was decided, what went well or poorly, and where the friction was.
 
-You are working inside a staged tmp directory at ${opts.tmpDir}. Use your native Read, Glob, Grep, and Bash tools to navigate it.
+You are working inside a staged tmp directory at ${opts.tmpDir}. Here's the exact layout:
+
+${tree}
 
 ## Inputs
 

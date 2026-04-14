@@ -28,7 +28,7 @@ const INITIAL_MESSAGE = `Please distill this Claude Code session into the struct
  */
 export async function distill(opts: DistillOptions): Promise<DistillResult> {
   const maxRetries = opts.maxRetries ?? 2;
-  const systemPrompt = buildSystemPrompt({ tmpDir: opts.tmpDir });
+  const systemPrompt = await buildSystemPrompt({ tmpDir: opts.tmpDir });
 
   let retries = 0;
   let followUps: string[] = [];
