@@ -111,15 +111,4 @@ All Plan 3 followup items that were destined for this file were addressed in Pla
 
 ## Plan 4 (real runner)
 
-### Distiller log capture vs SDK async-write race
-
-`src/orchestrate/distiller-log-capture.ts` runs immediately after the distill completes, but the Agent SDK keeps writing to the CC project dir asynchronously after the query stream ends. Observed during the verification run: the main distiller session file was captured, but a second `.jsonl` (~61 lines of `queue-operation` + `attachment` entries) was flushed AFTER the capture window closed and remained in the CC project dir as an orphan.
-
-Impact: a subsequent `alembic distill` run could pick up the orphan file as a candidate session if it ran discovery over `~/.claude/projects/`. For v1 we don't do UUID discovery from that dir, so the immediate risk is low, but the orphan files accumulate.
-
-**Fix options:**
-- Add a small delay (e.g. 1-2 seconds) before capture runs, giving the SDK time to flush
-- Call capture twice — once immediately, once after a delay — and merge results
-- Configure the SDK to not persist its session log at all (if `persistSession: false` or similar works)
-- Run capture in a loop, polling every 500ms until no new files appear, then giving up after a timeout
 

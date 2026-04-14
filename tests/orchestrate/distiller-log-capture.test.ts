@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { captureDistillerLog } from "../../src/orchestrate/distiller-log-capture.js";
+import { captureDistillerLog, waitForStability } from "../../src/orchestrate/distiller-log-capture.js";
 import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
 
 describe("captureDistillerLog", () => {
@@ -40,6 +40,8 @@ describe("captureDistillerLog", () => {
       sessionId: "source-sess-1",
       outputRoot,
       ccHome,
+      stabilityPollIntervalMs: 10,
+      stabilityTimeoutMs: 100,
     });
 
     // Files moved to <outputRoot>/sessions/source-sess-1/distiller-log/
@@ -68,5 +70,90 @@ describe("captureDistillerLog", () => {
 
     expect(result.filesCaptured).toBe(0);
     expect(existsSync(path.join(outputRoot, "sessions", "sess", "distiller-log"))).toBe(false);
+  });
+});
+
+describe("waitForStability", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanupTempDir(dir);
+  });
+
+  it("waitForStability returns quickly when the dir is stable", async () => {
+    const subdir = path.join(dir, "project");
+    mkdirSync(subdir, { recursive: true });
+    writeFileSync(path.join(subdir, "a.jsonl"), "a");
+    writeFileSync(path.join(subdir, "b.jsonl"), "bb");
+
+    const start = Date.now();
+    await waitForStability(subdir, { pollIntervalMs: 10, timeoutMs: 500, stableObservations: 2 });
+    const elapsed = Date.now() - start;
+
+    // Should return within ~30ms: 2 observations × 10ms
+    expect(elapsed).toBeLessThan(200);
+  });
+
+  it("waitForStability waits for writes to stop", async () => {
+    const subdir = path.join(dir, "project");
+    mkdirSync(subdir, { recursive: true });
+    writeFileSync(path.join(subdir, "a.jsonl"), "a");
+
+    // Schedule a write to happen 15ms in — well within the first 20ms poll
+    // interval so the new file is visible on the second poll (t≈20ms), which
+    // resets the stable counter and forces two more polls before returning.
+    // Track the handle so we can clear it if stability resolves unexpectedly
+    // early (avoids a dangling write into a cleaned-up temp dir).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      timer = setTimeout(() => {
+        writeFileSync(path.join(subdir, "b.jsonl"), "delayed");
+      }, 15);
+
+      const start = Date.now();
+      await waitForStability(subdir, { pollIntervalMs: 20, timeoutMs: 2000, stableObservations: 2 });
+      const elapsed = Date.now() - start;
+
+      // The write at 15ms resets stability; we need two more polls (~40ms more),
+      // so total elapsed should be well above 15ms.
+      expect(elapsed).toBeGreaterThan(15);
+      // Both files should be present
+      expect(existsSync(path.join(subdir, "a.jsonl"))).toBe(true);
+      expect(existsSync(path.join(subdir, "b.jsonl"))).toBe(true);
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+
+  it("waitForStability gives up after timeoutMs", async () => {
+    const subdir = path.join(dir, "project");
+    mkdirSync(subdir, { recursive: true });
+    writeFileSync(path.join(subdir, "a.jsonl"), "a");
+
+    // Keep churning the dir so it never stabilizes.
+    // Write monotonically-growing content so the file size strictly increases
+    // on each write, guaranteeing the signature changes every poll.
+    let churn = true;
+    (async () => {
+      let n = 0;
+      let content = "";
+      while (churn) {
+        content += `${n++}\n`; // grows each iteration — size never repeats
+        try { writeFileSync(path.join(subdir, "churn.jsonl"), content); } catch {}
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    })();
+
+    try {
+      const start = Date.now();
+      await waitForStability(subdir, { pollIntervalMs: 20, timeoutMs: 200, stableObservations: 3 });
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeGreaterThanOrEqual(200);
+      expect(elapsed).toBeLessThan(600);  // doesn't hang indefinitely
+    } finally {
+      churn = false;
+    }
   });
 });
