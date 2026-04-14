@@ -79,6 +79,7 @@ export async function stage(
   await mkdir(binDir, { recursive: true });
   await writeLintWrapper(binDir);
   await writeQueryWrapper(binDir);
+  await writeFileAtWrapper(binDir);
 
   return {
     tmpDir,
@@ -137,6 +138,19 @@ async function writeQueryWrapper(binDir: string): Promise<void> {
 exec node ${queryJs} "$@"
 `;
   const wrapperPath = path.join(binDir, "query");
+  await writeFile(wrapperPath, script, "utf8");
+  await chmod(wrapperPath, 0o755);
+}
+
+async function writeFileAtWrapper(binDir: string): Promise<void> {
+  const thisFile = fileURLToPath(import.meta.url);
+  const pkgRoot = await findPackageRoot(thisFile);
+  const cliJs = path.join(pkgRoot, "dist", "cli.js");
+
+  const script = `#!/bin/bash
+exec node ${cliJs} file-at "$@"
+`;
+  const wrapperPath = path.join(binDir, "file-at");
   await writeFile(wrapperPath, script, "utf8");
   await chmod(wrapperPath, 0o755);
 }

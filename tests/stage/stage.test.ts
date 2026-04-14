@@ -135,5 +135,13 @@ describe("stage", () => {
     expect(queryWrapper).toContain("query/cli");
     const queryMode = statSync(queryWrapperPath).mode;
     expect(queryMode & 0o100).not.toBe(0);
+
+    const fileAtWrapperPath = path.join(layout.binDir, "file-at");
+    expect(existsSync(fileAtWrapperPath)).toBe(true);
+    const fileAtWrapper = readFileSync(fileAtWrapperPath, "utf8");
+    expect(fileAtWrapper.startsWith("#!/bin/bash") || fileAtWrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(fileAtWrapper).toContain("cli.js file-at");
+    const fileAtMode = statSync(fileAtWrapperPath).mode;
+    expect(fileAtMode & 0o100).not.toBe(0);
   });
 });
