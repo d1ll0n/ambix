@@ -127,5 +127,13 @@ describe("stage", () => {
     expect(wrapper).toContain("lint-cli");
     const mode = statSync(wrapperPath).mode;
     expect(mode & 0o100).not.toBe(0);
+
+    const queryWrapperPath = path.join(layout.binDir, "query");
+    expect(existsSync(queryWrapperPath)).toBe(true);
+    const queryWrapper = readFileSync(queryWrapperPath, "utf8");
+    expect(queryWrapper.startsWith("#!/bin/bash") || queryWrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(queryWrapper).toContain("query/cli");
+    const queryMode = statSync(queryWrapperPath).mode;
+    expect(queryMode & 0o100).not.toBe(0);
   });
 });

@@ -55,7 +55,7 @@ function extractUserText(content: unknown): string {
   if (!Array.isArray(content)) return "";
   const parts: string[] = [];
   for (const block of content as ContentBlock[]) {
-    const anyB = block as Record<string, unknown>;
+    const anyB = block as unknown as Record<string, unknown>;
     if (anyB.type === "text" && typeof anyB.text === "string") {
       parts.push(anyB.text as string);
     } else if (anyB.type === "tool_result") {
@@ -69,7 +69,7 @@ function extractUserText(content: unknown): string {
 function extractAssistantText(content: ContentBlock[]): string {
   const parts: string[] = [];
   for (const block of content) {
-    const anyB = block as Record<string, unknown>;
+    const anyB = block as unknown as Record<string, unknown>;
     if (anyB.type === "text" && typeof anyB.text === "string") {
       parts.push(anyB.text as string);
     }

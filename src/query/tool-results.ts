@@ -54,7 +54,7 @@ function extractTextSnippet(content: unknown): string {
   if (typeof content === "string") return content.replace(/\n/g, " ");
   if (!Array.isArray(content)) return "";
   for (const block of content as ContentBlock[]) {
-    const anyB = block as Record<string, unknown>;
+    const anyB = block as unknown as Record<string, unknown>;
     if (anyB.type === "text" && typeof anyB.text === "string") {
       return (anyB.text as string).replace(/\n/g, " ");
     }

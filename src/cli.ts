@@ -7,6 +7,7 @@ import { analyze } from "./analyze/index.js";
 import { run } from "./orchestrate/run.js";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
+import { runQuery } from "./query/index.js";
 
 async function main(argv: string[]): Promise<number> {
   const [, , subcommand, ...rest] = argv;
@@ -24,6 +25,8 @@ async function main(argv: string[]): Promise<number> {
       return runAnalyze(rest);
     case "distill":
       return runDistill(rest);
+    case "query":
+      return runQueryCmd(rest);
     case "--help":
     case "-h":
     case "help":
@@ -137,6 +140,12 @@ async function runDistill(args: string[]): Promise<number> {
   return 0;
 }
 
+async function runQueryCmd(args: string[]): Promise<number> {
+  const { code, output } = await runQuery(args);
+  process.stdout.write(output);
+  return code;
+}
+
 function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
@@ -152,6 +161,7 @@ function printUsage(): void {
   console.error("  analyze <session-path>                 print deterministic analysis JSON");
   console.error("  distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]");
   console.error("                                          run the full pipeline (real runner by default; --mock for placeholder)");
+  console.error("  query <session.jsonl> <subcmd>         search a session log (see 'query --help')");
   console.error("  help                                  show this message");
 }
 
