@@ -111,14 +111,6 @@ All Plan 3 followup items that were destined for this file were addressed in Pla
 
 ## Plan 4 (real runner)
 
-### Real runner's SDK-adapter tokens are advisory only
-
-`RealAgentRunner.defaultQueryFn` reads token usage from `SDKResultMessage.usage`, which is NOT the aggregated multi-turn total — the haiku big-session run showed it undercounts by ~3x.
-
-**Workaround in place:** `src/orchestrate/run.ts` now computes authoritative distiller token usage by walking the captured distiller session log with parse-claude-logs' `Session` class (see `src/orchestrate/compute-distiller-usage.ts`). The SDK adapter's numbers are advisory; the log-derived numbers are what `RunResult.tokensUsed` carries.
-
-**Followup (low priority):** fix the adapter anyway so it's less confusing when someone reads `runner-real.ts`. Likely need to pull from `modelUsage` instead of `usage`, using camelCase field names. Add a regression test that compares the adapter's output against a log-computed ground truth on the same run.
-
 ### Distiller log capture vs SDK async-write race
 
 `src/orchestrate/distiller-log-capture.ts` runs immediately after the distill completes, but the Agent SDK keeps writing to the CC project dir asynchronously after the query stream ends. Observed during the verification run: the main distiller session file was captured, but a second `.jsonl` (~61 lines of `queue-operation` + `attachment` entries) was flushed AFTER the capture window closed and remained in the CC project dir as an orphan.
@@ -131,13 +123,3 @@ Impact: a subsequent `alembic distill` run could pick up the orphan file as a ca
 - Configure the SDK to not persist its session log at all (if `persistSession: false` or similar works)
 - Run capture in a loop, polling every 500ms until no new files appear, then giving up after a timeout
 
-### `permissionMode` root-user workaround
-
-`src/agent/runner-real.ts` currently passes `permissionMode: "acceptEdits"` to the Agent SDK. This is a workaround: the more permissive `bypassPermissions` maps to `--dangerously-skip-permissions` in the underlying Claude CLI, which refuses to run when the process is root (observed during Plan 4 Task 4's first smoke attempt — opaque exit code 1 with no stderr).
-
-**Fix options:**
-- Detect root at runtime and emit a clear error telling the user to either run as non-root or accept `acceptEdits` mode.
-- Allow the caller to override `permissionMode` via `RealAgentRunnerOptions`.
-- Document the tradeoff in the README once alembic gains one.
-
-`acceptEdits` is fine for v1 because the distiller only needs Read/Glob/Grep/Bash/Write and all writes are inside the tmp dir, but the silent failure mode is a sharp edge worth fixing before alembic leaves the sandbox.

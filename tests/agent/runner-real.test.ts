@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { RealAgentRunner, type StreamedAgentMessage, type QueryFn } from "../../src/agent/runner-real.js";
+import { RealAgentRunner, type StreamedAgentMessage, type QueryFn, resolvePermissionMode } from "../../src/agent/runner-real.js";
 import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
 import { lintNarrative } from "../../src/agent/lint.js";
 import type { Narrative } from "../../src/artifact/types.js";
@@ -61,13 +61,14 @@ describe("RealAgentRunner", () => {
       initialMessage: "please distill",
     });
 
-    const opts = capturedOpts as { cwd: string; systemPrompt: string; messages: Array<{ role: string; content: string }>; allowedTools: string[]; model: string };
+    const opts = capturedOpts as { cwd: string; systemPrompt: string; messages: Array<{ role: string; content: string }>; allowedTools: string[]; model: string; permissionMode: string };
     expect(opts.cwd).toBe(dir);
     expect(opts.systemPrompt).toBe("you are a distiller");
     expect(opts.messages[0].role).toBe("user");
     expect(opts.messages[0].content).toBe("please distill");
     expect(opts.model).toBe("claude-sonnet-4-6");
     expect(opts.allowedTools).toEqual(expect.arrayContaining(["Read", "Glob", "Grep", "Bash", "Write"]));
+    expect(typeof opts.permissionMode).toBe("string");
   });
 
   it("returns success=true after the agent writes a narrative and streams done", async () => {
@@ -159,5 +160,27 @@ describe("RealAgentRunner", () => {
       initialMessage: "go",
     });
     expect(result.turnCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("resolvePermissionMode", () => {
+  it("returns explicit mode when provided, regardless of root", () => {
+    expect(resolvePermissionMode("plan", false)).toBe("plan");
+    expect(resolvePermissionMode("plan", true)).toBe("plan");
+  });
+
+  it("defaults to acceptEdits under root", () => {
+    // Suppress the warning during the test to keep stderr clean
+    const origWarn = console.warn;
+    console.warn = () => {};
+    try {
+      expect(resolvePermissionMode(undefined, true)).toBe("acceptEdits");
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+
+  it("defaults to bypassPermissions when not root", () => {
+    expect(resolvePermissionMode(undefined, false)).toBe("bypassPermissions");
   });
 });

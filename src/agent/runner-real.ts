@@ -22,6 +22,7 @@ export interface QueryFnOptions {
   model: string;
   maxTurns: number;
   allowedTools: string[];
+  permissionMode: string;
 }
 
 /** The injectable query function signature. */
@@ -37,6 +38,11 @@ export interface RealAgentRunnerOptions {
   maxTurns?: number;
   /** Tools to allow. Default ["Read", "Glob", "Grep", "Bash", "Write"]. */
   allowedTools?: string[];
+  /**
+   * Permission mode passed to the Agent SDK. If omitted, auto-detected:
+   * root process → "acceptEdits", non-root → "bypassPermissions".
+   */
+  permissionMode?: string;
 }
 
 const DEFAULT_TOOLS = ["Read", "Glob", "Grep", "Bash", "Write"];
@@ -53,12 +59,17 @@ export class RealAgentRunner implements AgentRunner {
   private readonly model: string;
   private readonly maxTurns: number;
   private readonly allowedTools: string[];
+  private readonly permissionMode: string;
 
   constructor(opts: RealAgentRunnerOptions = {}) {
     this.queryFn = opts.queryFn ?? defaultQueryFn;
     this.model = opts.model ?? DEFAULT_MODEL;
     this.maxTurns = opts.maxTurns ?? DEFAULT_MAX_TURNS;
     this.allowedTools = opts.allowedTools ?? DEFAULT_TOOLS;
+    this.permissionMode = resolvePermissionMode(
+      opts.permissionMode,
+      process.getuid?.() === 0,
+    );
   }
 
   async run(ctx: AgentRunContext): Promise<AgentRunResult> {
@@ -76,6 +87,7 @@ export class RealAgentRunner implements AgentRunner {
       model: this.model,
       maxTurns: ctx.maxTurns ?? this.maxTurns,
       allowedTools: this.allowedTools,
+      permissionMode: this.permissionMode,
     });
 
     let turnCount = 0;
@@ -141,7 +153,8 @@ const defaultQueryFn: QueryFn = async function* (opts) {
       model: opts.model,
       maxTurns: opts.maxTurns,
       allowedTools: opts.allowedTools,
-      permissionMode: "acceptEdits",
+      // Cast to the SDK's enum type — we validated values via resolvePermissionMode
+      permissionMode: opts.permissionMode as "bypassPermissions" | "acceptEdits" | "default" | "plan" | "dontAsk" | "auto",
     },
   });
 
@@ -168,18 +181,17 @@ const defaultQueryFn: QueryFn = async function* (opts) {
           cache_read_input_tokens?: number;
           cache_creation_input_tokens?: number;
         };
+        modelUsage?: Record<string, {
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheReadInputTokens?: number;
+          cacheCreationInputTokens?: number;
+        }>;
         errors?: string[];
       };
       if (r.subtype === "success") {
-        yield {
-          type: "done",
-          tokens: {
-            in: r.usage?.input_tokens ?? 0,
-            out: r.usage?.output_tokens ?? 0,
-            cache_read: r.usage?.cache_read_input_tokens,
-            cache_write: r.usage?.cache_creation_input_tokens,
-          },
-        };
+        const tokens = aggregateResultTokens(r);
+        yield { type: "done", tokens };
       } else {
         yield {
           type: "error",
@@ -190,3 +202,61 @@ const defaultQueryFn: QueryFn = async function* (opts) {
     // ignore system, stream_event, etc.
   }
 };
+
+function aggregateResultTokens(r: {
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  };
+  modelUsage?: Record<string, {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadInputTokens?: number;
+    cacheCreationInputTokens?: number;
+  }>;
+}): NonNullable<StreamedAgentMessage["tokens"]> {
+  // Prefer per-model aggregated totals (camelCase, multi-turn aggregate)
+  if (r.modelUsage && Object.keys(r.modelUsage).length > 0) {
+    let inTok = 0, outTok = 0, cr = 0, cw = 0;
+    for (const m of Object.values(r.modelUsage)) {
+      inTok += m.inputTokens ?? 0;
+      outTok += m.outputTokens ?? 0;
+      cr += m.cacheReadInputTokens ?? 0;
+      cw += m.cacheCreationInputTokens ?? 0;
+    }
+    return { in: inTok, out: outTok, cache_read: cr, cache_write: cw };
+  }
+  // Fallback: top-level usage (snake_case, possibly last-turn only)
+  return {
+    in: r.usage?.input_tokens ?? 0,
+    out: r.usage?.output_tokens ?? 0,
+    cache_read: r.usage?.cache_read_input_tokens,
+    cache_write: r.usage?.cache_creation_input_tokens,
+  };
+}
+
+/**
+ * Determines the permissionMode to pass to the Agent SDK.
+ *
+ * - If an explicit mode is provided, it is used as-is.
+ * - Under root (isRoot=true), defaults to "acceptEdits" because
+ *   "bypassPermissions" maps to --dangerously-skip-permissions which
+ *   the Claude CLI refuses to run as root.
+ * - Otherwise defaults to "bypassPermissions".
+ */
+export function resolvePermissionMode(
+  explicit: string | undefined,
+  isRoot: boolean,
+): string {
+  if (explicit !== undefined) return explicit;
+  if (isRoot) {
+    console.warn(
+      "alembic: running as root, defaulting permissionMode=acceptEdits " +
+      "(bypassPermissions refuses to run under root)",
+    );
+    return "acceptEdits";
+  }
+  return "bypassPermissions";
+}
