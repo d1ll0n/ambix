@@ -1,4 +1,5 @@
 // src/stage/metadata.ts
+import path from "node:path";
 import type { Session } from "parse-claude-logs";
 import type { MetadataJson } from "../types.js";
 
@@ -15,6 +16,15 @@ export async function buildMetadata(session: Session): Promise<MetadataJson> {
   const lastTs = lastNonNullTimestamp(messages);
   const duration = computeDurationSeconds(firstTs, lastTs);
 
+  const subs = await session.subagents();
+  const query_targets: Record<string, string> = {
+    "session.jsonl": session.path,
+  };
+  for (const sub of subs) {
+    const subName = path.basename(sub.path, ".jsonl");
+    query_targets[`subagents/${subName}/session.jsonl`] = sub.path;
+  }
+
   return {
     session_id: session.sessionId,
     source_path: session.path,
@@ -27,6 +37,7 @@ export async function buildMetadata(session: Session): Promise<MetadataJson> {
     duration_s: duration,
     turn_count: messages.length,
     end_state: ongoing ? "ongoing" : "completed",
+    query_targets,
   };
 }
 

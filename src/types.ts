@@ -51,6 +51,15 @@ export interface MetadataJson {
   duration_s: number | null;
   turn_count: number;
   end_state: "completed" | "ongoing" | "unknown";
+  /**
+   * Map from local tmp-relative session.jsonl paths to the absolute raw
+   * Claude Code log files. Used by `bin/query` to resolve local paths
+   * the agent passes (e.g. "session.jsonl" or
+   * "subagents/agent-<uuid>/session.jsonl") back to the raw files that
+   * parse-claude-logs' Session class can parse. The agent never sees
+   * the raw paths directly — they stay out of the filesystem view.
+   */
+  query_targets: Record<string, string>;
 }
 
 /** Per-file timeline written to <tmp>/file-history/snapshots.json. */

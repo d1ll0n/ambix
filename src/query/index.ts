@@ -1,4 +1,6 @@
 // src/query/index.ts
+import { readFile, access } from "node:fs/promises";
+import path from "node:path";
 import { Session } from "parse-claude-logs";
 import { queryToolUses } from "./tool-uses.js";
 import { queryToolResults } from "./tool-results.js";
@@ -7,13 +9,31 @@ import { queryShow } from "./show.js";
 import { formatMatches } from "./format.js";
 import type { QueryOutputFormat } from "./types.js";
 
+async function resolveSessionPath(arg: string): Promise<string> {
+  // If cwd has a metadata.json with a matching query_targets entry, use it
+  const metadataPath = path.join(process.cwd(), "metadata.json");
+  try {
+    await access(metadataPath);
+    const meta = JSON.parse(await readFile(metadataPath, "utf8")) as {
+      query_targets?: Record<string, string>;
+    };
+    if (meta.query_targets && typeof meta.query_targets[arg] === "string") {
+      return meta.query_targets[arg];
+    }
+  } catch {
+    // no metadata.json or unreadable — fall through
+  }
+  return arg;
+}
+
 /** Run one of the query subcommands and return a string to print. */
 export async function runQuery(args: string[]): Promise<{ code: number; output: string }> {
-  const [sessionPath, subcommand, ...rest] = args;
-  if (!sessionPath || !subcommand || sessionPath === "--help" || sessionPath === "-h") {
-    return { code: sessionPath ? 0 : 1, output: helpText() };
+  const [sessionPathArg, subcommand, ...rest] = args;
+  if (!sessionPathArg || !subcommand || sessionPathArg === "--help" || sessionPathArg === "-h") {
+    return { code: sessionPathArg ? 0 : 1, output: helpText() };
   }
 
+  const sessionPath = await resolveSessionPath(sessionPathArg);
   const session = new Session(sessionPath);
   const format = parseFormat(rest);
 

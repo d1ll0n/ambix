@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { runQuery } from "../../src/query/index.js";
 import {
   makeTempDir,
@@ -70,5 +72,36 @@ describe("runQuery dispatcher", () => {
     const { code, output } = await runQuery([p, "tool-uses", "--count"]);
     expect(code).toBe(0);
     expect(output.trim()).toBe("2");
+  });
+
+  it("resolves local session.jsonl via metadata.json query_targets when cwd is a tmp dir", async () => {
+    // Set up a raw session file in the test dir
+    const rawSessionPath = path.join(dir, "raw-session.jsonl");
+    writeFileSync(
+      rawSessionPath,
+      joinLines(
+        toolUseAssistantLine({ name: "Write", input: { file_path: "foo.md" }, uuid: "a1" })
+      )
+    );
+
+    // Set up a fake tmp dir with metadata.json pointing to the raw session
+    const tmpDir = path.join(dir, "tmp");
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(
+      path.join(tmpDir, "metadata.json"),
+      JSON.stringify({ query_targets: { "session.jsonl": rawSessionPath } })
+    );
+
+    // Run query from inside the tmp dir — cwd must be tmpDir for the resolver to find metadata.json
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(tmpDir);
+      const { code, output } = await runQuery(["session.jsonl", "tool-uses"]);
+      expect(code).toBe(0);
+      expect(output).toContain("Write");
+      expect(output).toContain("foo.md");
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });
