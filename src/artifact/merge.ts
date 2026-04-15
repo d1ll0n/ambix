@@ -30,8 +30,8 @@ export function mergeArtifact(input: MergeArtifactInput): Artifact {
   };
 }
 
-/** Convenience: read narrative.json from disk, then merge. */
-mergeArtifact.fromPaths = async function (
+/** Read narrative.json from disk, then merge into an Artifact. */
+export async function mergeArtifactFromPaths(
   input: MergeArtifactFromPathsInput
 ): Promise<Artifact> {
   const narrative = JSON.parse(await readFile(input.narrativePath, "utf8")) as Narrative;
@@ -40,4 +40,4 @@ mergeArtifact.fromPaths = async function (
     deterministic: input.deterministic,
     narrative,
   });
-};
+}

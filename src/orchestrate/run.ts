@@ -4,7 +4,7 @@ import { stage } from "../stage/index.js";
 import { analyze } from "../analyze/index.js";
 import { buildMetadata } from "../stage/metadata.js";
 import { distill } from "../agent/distill.js";
-import { mergeArtifact } from "../artifact/merge.js";
+import { mergeArtifactFromPaths } from "../artifact/merge.js";
 import type { AgentRunner } from "../agent/types.js";
 import { resolveSessionPath } from "./resolve.js";
 import { persistArtifact } from "./persist.js";
@@ -107,7 +107,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
       };
     }
 
-    const artifact = await mergeArtifact.fromPaths({
+    const artifact = await mergeArtifactFromPaths({
       metadata,
       deterministic,
       narrativePath: path.join(tmpDir, "out", "narrative.json"),

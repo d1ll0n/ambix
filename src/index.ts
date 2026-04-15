@@ -35,7 +35,11 @@ export type { AgentRunner, AgentRunContext, AgentRunResult } from "./agent/types
 export { MockAgentRunner } from "./agent/runner-mock.js";
 export { distill } from "./agent/distill.js";
 export type { DistillOptions, DistillResult } from "./agent/distill.js";
-export { mergeArtifact } from "./artifact/merge.js";
+export { mergeArtifact, mergeArtifactFromPaths } from "./artifact/merge.js";
+export type {
+  MergeArtifactInput,
+  MergeArtifactFromPathsInput,
+} from "./artifact/merge.js";
 export type {
   Artifact,
   Narrative,

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { mergeArtifact } from "../../src/artifact/merge.js";
+import { mergeArtifact, mergeArtifactFromPaths } from "../../src/artifact/merge.js";
 import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
 import type { MetadataJson } from "../../src/types.js";
 import type { AnalyzeResult } from "../../src/analyze/index.js";
@@ -82,7 +82,7 @@ describe("mergeArtifact", () => {
     mkdirSync(path.join(dir, "out"), { recursive: true });
     writeFileSync(path.join(dir, "out", "narrative.json"), JSON.stringify(blankNarrative()));
 
-    const artifact = await mergeArtifact.fromPaths({
+    const artifact = await mergeArtifactFromPaths({
       metadata: blankMetadata(),
       deterministic: blankDeterministic(),
       narrativePath: path.join(dir, "out", "narrative.json"),
