@@ -4,15 +4,57 @@ import { buildTreeView } from "./tree-view.js";
 /** Options for building the distiller system prompt. */
 export interface BuildPromptOptions {
   tmpDir: string;
+  /**
+   * Whether the orchestrator is inlining `metadata.json` and `session.jsonl`
+   * into the agent's initial user message. When true, the prompt tells the
+   * agent to work from the inlined content. When false (or omitted), the
+   * agent is told to Read the files from the staged tmp dir itself,
+   * paginating with offset/limit if the condensed log is too big for a
+   * single Read.
+   */
+  inlinedCondensed?: boolean;
 }
 
 /**
  * Build the system prompt handed to the distiller agent. Describes
- * the role, goal, tmp directory layout, rehydration guidance,
+ * the role, goal, tmp directory layout, expected workflow,
  * narrative schema, and verification requirement.
  */
 export async function buildSystemPrompt(opts: BuildPromptOptions): Promise<string> {
   const tree = await buildTreeView(opts.tmpDir);
+  const inlined = opts.inlinedCondensed === true;
+
+  const sessionInputBullet = inlined
+    ? "- `session.jsonl` — the condensed chronological log. **The contents of this file are inlined directly in your initial user message**, along with `metadata.json`. Work from the inlined content; you do not need to Read this file unless you specifically want to fetch lines via offset/limit (which is rarely useful since you already have the full log)."
+    : "- `session.jsonl` — the condensed chronological log. One JSON object per line. Read it as your primary source of truth. Usually one Read covers the entire file; for long sessions you may need to paginate with offset/limit. Do **not** iterate through turns one at a time via `bin/query show`.";
+
+  const workflow = inlined
+    ? `## Workflow
+
+The expected loop is small and bounded:
+
+1. Read the inlined metadata + condensed session log in your initial user message. Most of your narrative should come from this content alone.
+2. For each truncation stub you encounter, decide from the \`preview\` whether you can already tell what happened. If the preview is enough, do **not** rehydrate.
+3. Only when a preview is genuinely insufficient — the turn is load-bearing for your narrative **and** the preview leaves real ambiguity — Read the corresponding \`turns/NNNNN.json\` (or \`spill/...\`) for the full content.
+4. Subagents: same rule. Read \`subagents/agent-<uuid>/session.jsonl\` only when the parent's Task tool_result preview doesn't tell you what the subagent actually did.
+5. \`bin/query\` is for *searches and field extraction* across the log (find every errored tool_result, find tool_uses by name, fetch a specific field from a specific turn). It is **not** for iterating through turns one by one — the entire condensed log is already in your context above. If you catch yourself running \`query show 0\`, \`query show 1\`, \`query show 2\`, stop and reread the inlined log.
+6. Run \`bin/lint-output\` and write \`out/narrative.json\`.
+
+A typical run is on the order of ~3 tool calls plus ~1 per truncated turn you genuinely need to rehydrate. If you're past 15 tool calls and still gathering input, you are almost certainly over-rehydrating — reconsider whether you actually need more data before fetching it.`
+    : `## Workflow
+
+The expected loop is small and bounded:
+
+1. Read \`metadata.json\` once (it is small).
+2. Read \`session.jsonl\` (paginating with offset/limit if it doesn't fit in one Read). Most of your narrative should come from this single file plus the metadata.
+3. For each truncation stub you encounter, decide from the \`preview\` whether you can already tell what happened. If the preview is enough, do **not** rehydrate.
+4. Only when a preview is genuinely insufficient — the turn is load-bearing for your narrative **and** the preview leaves real ambiguity — Read the corresponding \`turns/NNNNN.json\` (or \`spill/...\`) for the full content.
+5. Subagents: same rule. Read \`subagents/agent-<uuid>/session.jsonl\` only when the parent's Task tool_result preview doesn't tell you what the subagent actually did.
+6. \`bin/query\` is for *searches and field extraction* across the log (find every errored tool_result, find tool_uses by name, fetch a specific field from a specific turn). It is **not** for iterating through turns one by one — just Read the file. If you catch yourself running \`query show 0\`, \`query show 1\`, \`query show 2\`, stop and Read the file (or its relevant offset/limit window) instead.
+7. Run \`bin/lint-output\` and write \`out/narrative.json\`.
+
+A typical run is on the order of ~3–5 tool calls plus ~1 per truncated turn you genuinely need to rehydrate. If you're past 15 tool calls and still gathering input, you are almost certainly over-rehydrating — reconsider whether you actually need more data before fetching it.`;
+
   return `You are a session distiller. Your goal is to read a completed Claude Code session log and produce a structured JSON narrative summarizing what happened, what was decided, what went well or poorly, and where the friction was.
 
 You are working inside a staged tmp directory at ${opts.tmpDir}. Here's the exact layout:
@@ -21,8 +63,8 @@ ${tree}
 
 ## Inputs
 
-- \`metadata.json\` — session metadata (id, version, cwd, branch, duration, end state). Read this first.
-- \`session.jsonl\` — the condensed chronological log. One JSON object per line. Each entry has \`ix\` (session-local index), \`ref\` (original uuid), \`parent_ix\`, \`role\`, \`type\`, \`ts\`, \`content\`, and for assistant entries, \`tokens\`. Read this linearly as your primary source of truth.
+- \`metadata.json\` — session metadata (id, version, cwd, branch, duration, end state).${inlined ? " Inlined in your initial user message." : " Read this first."}
+${sessionInputBullet}
 - \`turns/NNNNN.json\` — full untruncated entries for turns whose content was truncated inline in session.jsonl. Accessible via Read when a truncation stub references them.
 - \`spill/toolu_*.json\` (or .txt) — full content of tool results that were too large to inline (off-log files copied in from the source session). Accessible via Read.
 - \`subagents/agent-<uuid>/session.jsonl\` — the full condensed log of each subagent, in the same format as the parent. **Important**: the parent log only contains the \`Task\` tool_use (with the prompt that was sent to the subagent) and its tool_result (the subagent's final return message). The subagent's full conversation — all intermediate tool calls, reasoning, partial findings, multi-step work — lives ONLY in its own \`session.jsonl\` here. If the parent's Task tool_use / tool_result pair doesn't give you enough to describe what a subagent actually did, you MUST rehydrate the subagent file to learn more. Discover with \`Glob("subagents/*/session.jsonl")\`.
@@ -39,6 +81,8 @@ When content was too large to inline, you'll see stub objects with this shape:
 The \`preview\` field gives you the beginning of the actual value, so you can usually tell what was there without rehydrating. Use \`tokens_est\` to decide whether fetching the full version is worth the cost. When a tool_use input has per-field stubs, small fields are still inline — only the large fields are replaced with stubs.
 
 A stub with \`ref: "spill/..."\` points at a file already copied into the tmp directory (read it with the Read tool). A stub with \`ref: "turns/..."\` points at a per-turn JSON file containing the full source entry.
+
+${workflow}
 
 ## Output
 
@@ -98,8 +142,7 @@ Every narrative claim you make MUST carry \`refs\` — session-local \`ix\` valu
 - Episodes are distinct phases of the session (research, planning, implementation, review, etc.). A session can be one episode or many. Decide based on the actual shifts in focus.
 - Corrections are specific mistakes that were caught and fixed during the session. Friction points are broader observations about what was awkward or inefficient. Use friction_points to flag things that belong in your downstream review pipeline (tooling gaps, redundant work, documentation gaps, missing memory, etc.). When you have a concrete suggestion about the source, put it in the \`attribution\` field.
 - Subagents: every \`Task\` tool_use in the parent log has a corresponding full subagent session under \`subagents/agent-<uuid>/session.jsonl\`. The parent log only carries the subagent's final return message, NOT its internal work. Whenever a subagent's contribution is load-bearing for your narrative — what it found, how it got there, whether it succeeded — read the subagent's own session.jsonl. You correlate a parent Task tool_use to its subagent by matching the parent's \`input.prompt\` against the subagent's first user message (they are the same string), or by timestamp ordering when prompts are ambiguous. Do NOT report a subagent's output as "unknown" or "not shown" — the file is always there, you just have to read it.
-- When in doubt about a turn, Read \`turns/NNNNN.json\` for the full entry. When a preview gives you enough, don't rehydrate.
-- Searching session logs: use \`bin/query <session.jsonl> --help\` to see available search subcommands. The helper lets you find tool_use blocks by name, errored tool_results, substring matches in text, and specific fields from specific turns — without reading the whole file. Examples: \`bin/query subagents/agent-<id>/session.jsonl tool-uses --name Write\` to find every Write in a subagent, then \`bin/query ... show <ix> --field message.content[0].input.content\` to read the content of a specific Write. Use this instead of reading large session files linearly. \`bin/query\` accepts the same local paths you use with the \`Read\` tool (e.g. \`session.jsonl\` or \`subagents/agent-<uuid>/session.jsonl\`) — it resolves them to the underlying raw logs internally, so the raw files never enter your filesystem view.
+- \`bin/query\` reference: \`bin/query <path> --help\` lists search subcommands. Use it for *filter/extract* operations — e.g. \`bin/query subagents/agent-<id>/session.jsonl tool-uses --name Write\` to find every Write in a subagent, then \`bin/query <path> show <ix> --field message.content[0].input.content\` to read one specific field. It accepts the same local paths you'd pass to Read (e.g. \`session.jsonl\` or \`subagents/agent-<uuid>/session.jsonl\`) and resolves them to the underlying raw logs internally. See the Workflow section for when to reach for it vs. when to just read the inlined log.
 
 ## Verification (required)
 

@@ -58,7 +58,7 @@ export interface RealAgentRunnerOptions {
 
 const DEFAULT_TOOLS = ["Read", "Glob", "Grep", "Bash", "Write"];
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DEFAULT_MAX_TURNS = 100;
+const DEFAULT_MAX_TURNS = 40;
 
 /**
  * Production AgentRunner that spawns the distiller via the Claude

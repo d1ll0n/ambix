@@ -28,6 +28,10 @@ export interface RunOptions {
   keepTmp?: boolean;
   /** Max distill retries. Default 2. */
   maxRetries?: number;
+  /** Forwarded to stage(): inline budget in bytes (default 2048). */
+  maxInlineBytes?: number;
+  /** Print a condensation report to stderr after staging. Default false. */
+  verbose?: boolean;
 }
 
 /** Result of a top-level run. */
@@ -69,7 +73,15 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   const tmpDir = await makeTmpWorkspace({ root: tmpRoot, sessionId: session.sessionId });
 
   try {
-    await stage(session, tmpDir);
+    const layout = await stage(session, tmpDir, { maxInlineBytes: opts.maxInlineBytes });
+    if (opts.verbose && layout.condenseStats) {
+      const { formatCondenseStats } = await import("../stage/format-stats.js");
+      process.stderr.write(
+        `${formatCondenseStats(layout.condenseStats, {
+          title: `Condensation report (maxInlineBytes=${opts.maxInlineBytes ?? 2048})`,
+        })}\n`
+      );
+    }
     const metadata = await buildMetadata(session);
     const deterministic = await analyze(session);
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Session } from "parse-claude-logs";
 import { defaultFileHistoryDir } from "parse-claude-logs";
 import type { StageLayout } from "../types.js";
-import { condenseEntries } from "./condense.js";
+import { condenseEntriesWithStats } from "./condense.js";
 import { collectAndCopySpills } from "./copy-spills.js";
 import { stageSubagents } from "./copy-subagents.js";
 import { stageFileHistory } from "./file-history.js";
@@ -42,7 +42,9 @@ export async function stage(
 
   // 2. Condense
   const entries = await session.messages();
-  const condensed = condenseEntries(entries, { maxInlineBytes });
+  const { entries: condensed, stats: condenseStats } = condenseEntriesWithStats(entries, {
+    maxInlineBytes,
+  });
   const sessionPath = path.join(tmpDir, "session.jsonl");
   const jsonl = `${condensed.map((e) => JSON.stringify(e)).join("\n")}\n`;
   await writeFile(sessionPath, jsonl, "utf8");
@@ -94,6 +96,7 @@ export async function stage(
     truncatedIndices,
     spillCount: spillResult.copied,
     subagentCount: subResult.staged,
+    condenseStats,
   };
 }
 

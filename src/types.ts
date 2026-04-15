@@ -90,4 +90,6 @@ export interface StageLayout {
   truncatedIndices: number[];
   spillCount: number;
   subagentCount: number;
+  /** Per-kind condensation stats. Present when staging collected them. */
+  condenseStats?: import("./stage/condense.js").CondenseStats;
 }

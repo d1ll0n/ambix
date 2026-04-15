@@ -5,8 +5,10 @@ import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
 import { fileAt } from "./file-at.js";
+import { resolveSessionPath } from "./orchestrate/resolve.js";
 import { run } from "./orchestrate/run.js";
 import { runQuery } from "./query/index.js";
+import { formatCondenseStats } from "./stage/format-stats.js";
 import { stage } from "./stage/index.js";
 
 async function main(argv: string[]): Promise<number> {
@@ -41,24 +43,61 @@ async function main(argv: string[]): Promise<number> {
 
 async function runStage(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic stage <session-path> [--tmp <tmp-dir>]");
+    console.error(
+      "usage: alembic stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
+    );
     console.error("");
     console.error("Stage a session into a tmp workspace. Prints the StageLayout JSON on success.");
     console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
     console.error("flags:");
-    console.error("  --tmp <dir>   tmp workspace root (default: $TMPDIR/alembic-<pid>)");
+    console.error(
+      "  --tmp <dir>               tmp workspace root (default: $TMPDIR/alembic-<pid>)"
+    );
+    console.error("  --max-inline-bytes <N>    inline budget in bytes for tool_results / text");
+    console.error("                            and per-field tool_use inputs (default 2048)");
+    console.error("  -v, --verbose             print a condensation report (per-kind counts,");
+    console.error("                            original vs inlined bytes, truncation rate) to");
+    console.error("                            stderr in addition to the StageLayout JSON");
     return 0;
   }
   const sessionArg = args[0];
   const tmpArg = parseFlag(args, "--tmp");
+  const maxInlineBytesArg = parseFlag(args, "--max-inline-bytes");
+  const verbose = args.includes("--verbose") || args.includes("-v");
   if (!sessionArg) {
-    console.error("alembic stage: missing <session-path>");
-    console.error("usage: alembic stage <session-path> [--tmp <tmp-dir>]");
+    console.error("alembic stage: missing <session-path-or-id>");
+    console.error(
+      "usage: alembic stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
+    );
     return 1;
   }
-  const session = new Session(sessionArg);
+  let maxInlineBytes: number | undefined;
+  if (maxInlineBytesArg !== undefined) {
+    maxInlineBytes = Number.parseInt(maxInlineBytesArg, 10);
+    if (Number.isNaN(maxInlineBytes) || maxInlineBytes < 0) {
+      console.error(`alembic stage: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
+      return 1;
+    }
+  }
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`alembic stage: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+  const session = new Session(sessionPath);
   const tmpDir = tmpArg ?? `${process.env.TMPDIR ?? "/tmp"}/alembic-${process.pid}`;
-  const layout = await stage(session, tmpDir);
+  const layout = await stage(session, tmpDir, { maxInlineBytes });
+  if (verbose && layout.condenseStats) {
+    process.stderr.write(
+      `${formatCondenseStats(layout.condenseStats, {
+        title: `Condensation report (maxInlineBytes=${maxInlineBytes ?? 2048})`,
+      })}\n`
+    );
+  }
   console.log(JSON.stringify(layout, null, 2));
   return 0;
 }
@@ -94,18 +133,27 @@ async function runFileAt(args: string[]): Promise<number> {
 
 async function runAnalyze(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic analyze <session-path>");
+    console.error("usage: alembic analyze <session-path-or-id>");
     console.error("");
     console.error("Deterministic analysis over a session. Prints AnalyzeResult JSON to stdout.");
+    console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     return 0;
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("alembic analyze: missing <session-path>");
-    console.error("usage: alembic analyze <session-path>");
+    console.error("alembic analyze: missing <session-path-or-id>");
+    console.error("usage: alembic analyze <session-path-or-id>");
     return 1;
   }
-  const session = new Session(sessionArg);
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`alembic analyze: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+  const session = new Session(sessionPath);
   const result = await analyze(session);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return 0;
@@ -113,23 +161,32 @@ async function runAnalyze(args: string[]): Promise<number> {
 
 async function runDistill(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic distill <session-path> [flags]");
+    console.error("usage: alembic distill <session-path-or-id> [flags]");
     console.error("");
     console.error("Run the full pipeline: stage → analyze → distill → merge → persist.");
     console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
     console.error("flags:");
-    console.error("  --output <root>    artifact output root (default: ~/.alembic)");
-    console.error("  --tmp-root <dir>   tmp workspace root (default: $TMPDIR/alembic)");
-    console.error("  --keep-tmp         retain tmp dir on success (always retained on failure)");
-    console.error("  --mock             use MockAgentRunner (skips API calls)");
-    console.error("  --model <id>       model ID passed to RealAgentRunner");
+    console.error("  --output <root>           artifact output root (default: ~/.alembic)");
+    console.error("  --tmp-root <dir>          tmp workspace root (default: $TMPDIR/alembic)");
+    console.error(
+      "  --keep-tmp                retain tmp dir on success (always retained on failure)"
+    );
+    console.error("  --mock                    use MockAgentRunner (skips API calls)");
+    console.error("  --model <id>              model ID passed to RealAgentRunner");
+    console.error("  --max-inline-bytes <N>    inline budget in bytes for tool_results / text");
+    console.error("                            and per-field tool_use inputs (default 2048)");
+    console.error(
+      "  -v, --verbose             print a condensation report to stderr before distill"
+    );
     return 0;
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("alembic distill: missing <session-path>");
+    console.error("alembic distill: missing <session-path-or-id>");
     console.error(
-      "usage: alembic distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]"
+      "usage: alembic distill <session-path-or-id> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>] [--max-inline-bytes <N>] [-v|--verbose]"
     );
     return 1;
   }
@@ -138,6 +195,17 @@ async function runDistill(args: string[]): Promise<number> {
   const keepTmp = args.includes("--keep-tmp");
   const useMock = args.includes("--mock");
   const model = parseFlag(args, "--model");
+  const maxInlineBytesArg = parseFlag(args, "--max-inline-bytes");
+  const verbose = args.includes("--verbose") || args.includes("-v");
+
+  let maxInlineBytes: number | undefined;
+  if (maxInlineBytesArg !== undefined) {
+    maxInlineBytes = Number.parseInt(maxInlineBytesArg, 10);
+    if (Number.isNaN(maxInlineBytes) || maxInlineBytes < 0) {
+      console.error(`alembic distill: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
+      return 1;
+    }
+  }
 
   const runner = useMock ? new MockAgentRunner() : new RealAgentRunner({ model });
 
@@ -147,6 +215,8 @@ async function runDistill(args: string[]): Promise<number> {
     tmpRoot,
     runner,
     keepTmp,
+    maxInlineBytes,
+    verbose,
   });
 
   if (!result.success) {
@@ -204,11 +274,13 @@ function printUsage(): void {
   console.error("");
   console.error("subcommands:");
   console.error(
-    "  distill  <session-path>    run the full pipeline (stage → analyze → distill → merge)"
+    "  distill  <session-path-or-id>    run the full pipeline (stage → analyze → distill → merge)"
   );
-  console.error("  analyze  <session-path>    deterministic analysis only (prints JSON to stdout)");
   console.error(
-    "  stage    <session-path>    stage a session into a tmp workspace (prints layout JSON)"
+    "  analyze  <session-path-or-id>    deterministic analysis only (prints JSON to stdout)"
+  );
+  console.error(
+    "  stage    <session-path-or-id>    stage a session into a tmp workspace (prints layout JSON)"
   );
   console.error(
     "  file-at  <path> <ix>       print a tracked file's content at a given turn index"
