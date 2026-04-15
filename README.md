@@ -1,24 +1,88 @@
 # alembic
 
-Session distillation pipeline for Claude Code session logs. Produces per-session structured summary artifacts that feed into downstream review agents analyzing agent harnesses, documentation, memory, skills, and tools.
+**Session distillation pipeline for [Claude Code](https://claude.ai/code) session logs.**
 
-## Status
+Alembic stages, analyzes, and distills Claude Code session JSONL logs into structured summary artifacts suitable for downstream review, search, and retrospective analysis.
 
-Scaffold only. Implementation pending.
+> **Status:** Experimental. API may change before v1.0.
 
-## Design
+## Requirements
 
-Full design spec: [`docs/local-plans/specs/2026-04-13-session-distillery-design.md`](docs/local-plans/specs/2026-04-13-session-distillery-design.md)
+- Node.js >= 22
 
-## Architecture
+## Installation
 
-- **`parse-claude-logs`** (sibling repo at `../parse-claude-logs`) — used as a pure library dependency. Provides Session parsing, discovery, derive modules, spill file handling, subagent discovery, and file-history joining. Open-source-ready.
-- **`alembic`** (this repo) — owns the full distillation pipeline: deterministic analysis, tmp-dir staging, condensed JSONL rendering, distiller agent orchestration, output validation, artifact merging, and storage. All new code for this project lives here.
+> **Note:** Alembic currently depends on `parse-claude-logs` as a sibling checkout. A published npm release is pending.
 
-## Usage (planned)
-
-```
-alembic distill <session-id>
+```bash
+npm install alembic
 ```
 
-Produces a single JSON artifact at `~/.alembic/sessions/<session-id>/artifact.json` containing session metadata, full deterministic stats, and an agent-produced structured narrative with traceability back to source turns.
+## CLI Quickstart
+
+Distill a session into a structured artifact:
+
+```bash
+alembic distill /path/to/session.jsonl
+```
+
+This runs the full pipeline (stage → analyze → distill → merge) and writes an artifact to `~/.alembic/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
+
+Other subcommands:
+
+- `alembic analyze <session>` — deterministic analysis only (JSON to stdout)
+- `alembic stage <session>` — stage a session into a tmp workspace
+- `alembic file-at <path> <ix>` — print a tracked file's content at a given turn
+- `alembic query <session> <subcmd>` — search within a session log
+
+Run `alembic help` or `alembic <subcommand> --help` for full flag documentation.
+
+> The `stage`, `file-at`, and `query` subcommands are primarily intended as tools the staged distiller agent calls during a distill run. `distill` and `analyze` are the human-facing entry points.
+
+## Concepts
+
+Alembic runs a four-stage pipeline over a Claude Code session log:
+
+1. **Stage** — copies the session into a tmp workspace and produces a condensed JSONL view with rehydrated file histories and tool result snapshots.
+2. **Analyze** — deterministic pass that computes token totals, tool usage, file churn, bash clusters, failures, and permission events.
+3. **Distill** — an agent reads the staged workspace and produces a structured `Narrative` (main task, episodes, decisions, corrections, verifications, friction points, wins, unresolved items).
+4. **Merge + Persist** — combines metadata, deterministic analysis, and narrative into a final `Artifact` persisted to `~/.alembic`.
+
+See [`docs/concepts.md`](docs/concepts.md) for the full pipeline walkthrough and artifact schema.
+
+## Programmatic API
+
+Full pipeline:
+
+```typescript
+import { run, RealAgentRunner } from "alembic";
+
+const result = await run({
+  session: "/path/to/session.jsonl",
+  runner: new RealAgentRunner({ model: "claude-sonnet-4-6" }),
+});
+
+if (result.success) {
+  console.log(`artifact: ${result.artifactPath}`);
+}
+```
+
+Lower-level building blocks:
+
+```typescript
+import { stage, analyze, fileAt } from "alembic";
+import { Session } from "parse-claude-logs";
+
+const session = new Session("/path/to/session.jsonl");
+const layout = await stage(session, "/tmp/alembic-work");
+const results = await analyze(session);
+const file = await fileAt({
+  tmp: "/tmp/alembic-work",
+  path: "src/foo.ts",
+  ix: 42,
+});
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
