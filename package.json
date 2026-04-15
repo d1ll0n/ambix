@@ -3,10 +3,22 @@
   "version": "0.0.1",
   "description": "Session distillation pipeline for Claude Code logs — analyzes, stages, and produces structured summary artifacts for downstream agent review.",
   "license": "MIT",
+  "author": "Dillon",
   "repository": {
     "type": "git",
     "url": "https://github.com/d1ll0n/alembic"
   },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "session",
+    "log",
+    "distillation",
+    "analysis",
+    "llm",
+    "agent",
+    "artifact"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,7 +42,8 @@
     "dev": "node --experimental-strip-types src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
