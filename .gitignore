@@ -4,3 +4,4 @@ dist/
 docs/local-plans/
 docs/local/
 .claude/
+coverage/
