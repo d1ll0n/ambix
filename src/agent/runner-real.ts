@@ -1,7 +1,11 @@
 // src/agent/runner-real.ts
 import type { AgentRunContext, AgentRunResult, AgentRunner } from "./types.js";
 
-/** Internal abstraction of SDK-streamed messages. */
+/**
+ * Advanced: normalized message shape emitted by the custom `QueryFn`
+ * adapter. Only needed if you are overriding the default query
+ * function used by `RealAgentRunner`.
+ */
 export interface StreamedAgentMessage {
   type: "text" | "tool_use" | "tool_result" | "done" | "error";
   content?: string;
@@ -14,7 +18,10 @@ export interface StreamedAgentMessage {
   error?: string;
 }
 
-/** Options passed to the injectable query function. */
+/**
+ * Advanced: options passed to a custom `QueryFn`. Only needed if you
+ * are overriding the default query function used by `RealAgentRunner`.
+ */
 export interface QueryFnOptions {
   cwd: string;
   systemPrompt: string;
@@ -25,7 +32,11 @@ export interface QueryFnOptions {
   permissionMode: string;
 }
 
-/** The injectable query function signature. */
+/**
+ * Advanced: the shape of a custom query function that can be passed
+ * to `RealAgentRunner` to replace the default Claude Agent SDK call.
+ * Useful for testing, replay, or using a different transport.
+ */
 export type QueryFn = (opts: QueryFnOptions) => AsyncIterable<StreamedAgentMessage>;
 
 /** Options for constructing a RealAgentRunner. */
@@ -238,13 +249,16 @@ function aggregateResultTokens(r: {
 }
 
 /**
- * Determines the permissionMode to pass to the Agent SDK.
+ * Pick a permission mode for the underlying Claude Agent SDK query.
  *
- * - If an explicit mode is provided, it is used as-is.
- * - Under root (isRoot=true), defaults to "acceptEdits" because
- *   "bypassPermissions" maps to --dangerously-skip-permissions which
- *   the Claude CLI refuses to run as root.
- * - Otherwise defaults to "bypassPermissions".
+ * Rules:
+ *  - If the caller explicitly passed a mode, honor it.
+ *  - If running as root (uid 0), fall back to `acceptEdits`.
+ *    `bypassPermissions` rejects root to avoid accidentally running
+ *    destructive commands unsupervised, so we use the next-most-open
+ *    mode instead.
+ *  - Otherwise default to `bypassPermissions` since alembic is invoked
+ *    in a controlled, isolated tmp workspace.
  */
 export function resolvePermissionMode(
   explicit: string | undefined,
