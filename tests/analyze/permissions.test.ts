@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectPermissionEvents } from "../../src/analyze/permissions.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
+  makeTempDir,
   userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("collectPermissionEvents", () => {

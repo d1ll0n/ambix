@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildFileChurnTimeline } from "../../src/analyze/file-churn.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
-  userLine,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("buildFileChurnTimeline", () => {
@@ -24,7 +24,10 @@ describe("buildFileChurnTimeline", () => {
       userLine({ text: "hi" }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" } }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "b.ts" } }),
-      toolUseAssistantLine({ name: "Edit", input: { file_path: "a.ts", old_string: "x", new_string: "y" } }),
+      toolUseAssistantLine({
+        name: "Edit",
+        input: { file_path: "a.ts", old_string: "x", new_string: "y" },
+      }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" } })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
@@ -43,9 +46,7 @@ describe("buildFileChurnTimeline", () => {
   });
 
   it("returns an empty array when no file-affecting tools were used", async () => {
-    const text = joinLines(
-      toolUseAssistantLine({ name: "Bash", input: { command: "ls" } })
-    );
+    const text = joinLines(toolUseAssistantLine({ name: "Bash", input: { command: "ls" } }));
     const session = new Session(writeFixture(dir, "session.jsonl", text));
     const entries = await session.messages();
 
@@ -55,7 +56,10 @@ describe("buildFileChurnTimeline", () => {
   it("classifies Write as 'write', Edit and MultiEdit as 'edit', Read as 'read'", async () => {
     const text = joinLines(
       toolUseAssistantLine({ name: "Write", input: { file_path: "f.ts", content: "x" } }),
-      toolUseAssistantLine({ name: "Edit", input: { file_path: "f.ts", old_string: "x", new_string: "y" } }),
+      toolUseAssistantLine({
+        name: "Edit",
+        input: { file_path: "f.ts", old_string: "x", new_string: "y" },
+      }),
       toolUseAssistantLine({ name: "MultiEdit", input: { file_path: "f.ts", edits: [] } }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "f.ts" } })
     );

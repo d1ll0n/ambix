@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildMetadata } from "../../src/stage/metadata.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("buildMetadata", () => {

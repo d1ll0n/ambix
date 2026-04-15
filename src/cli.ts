@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // src/cli.ts
 import { Session } from "parse-claude-logs";
-import { stage } from "./stage/index.js";
-import { fileAt } from "./file-at.js";
-import { analyze } from "./analyze/index.js";
-import { run } from "./orchestrate/run.js";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
+import { analyze } from "./analyze/index.js";
+import { fileAt } from "./file-at.js";
+import { run } from "./orchestrate/run.js";
 import { runQuery } from "./query/index.js";
+import { stage } from "./stage/index.js";
 
 async function main(argv: string[]): Promise<number> {
   const [, , subcommand, ...rest] = argv;
@@ -107,7 +107,7 @@ async function runAnalyze(args: string[]): Promise<number> {
   }
   const session = new Session(sessionArg);
   const result = await analyze(session);
-  process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   return 0;
 }
 
@@ -128,7 +128,9 @@ async function runDistill(args: string[]): Promise<number> {
   const sessionArg = args[0];
   if (!sessionArg) {
     console.error("alembic distill: missing <session-path>");
-    console.error("usage: alembic distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]");
+    console.error(
+      "usage: alembic distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]"
+    );
     return 1;
   }
   const outputRoot = parseFlag(args, "--output");
@@ -137,9 +139,7 @@ async function runDistill(args: string[]): Promise<number> {
   const useMock = args.includes("--mock");
   const model = parseFlag(args, "--model");
 
-  const runner = useMock
-    ? new MockAgentRunner()
-    : new RealAgentRunner({ model });
+  const runner = useMock ? new MockAgentRunner() : new RealAgentRunner({ model });
 
   const result = await run({
     session: sessionArg,
@@ -167,8 +167,12 @@ async function runDistill(args: string[]): Promise<number> {
     const srcTotal = src.in + src.out;
     const dTotal = d.in + d.out;
     const ratio = srcTotal > 0 ? (dTotal / srcTotal).toFixed(3) : "n/a";
-    console.log(`source session tokens: in=${src.in} out=${src.out} cache_read=${src.cache_read} cache_write=${src.cache_write}`);
-    console.log(`distiller tokens:      in=${d.in} out=${d.out}${d.cache_read != null ? ` cache_read=${d.cache_read}` : ""}${d.cache_write != null ? ` cache_write=${d.cache_write}` : ""}`);
+    console.log(
+      `source session tokens: in=${src.in} out=${src.out} cache_read=${src.cache_read} cache_write=${src.cache_write}`
+    );
+    console.log(
+      `distiller tokens:      in=${d.in} out=${d.out}${d.cache_read != null ? ` cache_read=${d.cache_read}` : ""}${d.cache_write != null ? ` cache_write=${d.cache_write}` : ""}`
+    );
     console.log(`distiller total / source total = ${ratio}`);
   }
   if (result.distillerLogDir) {
@@ -199,17 +203,27 @@ function printUsage(): void {
   console.error("usage: alembic <subcommand> [args]");
   console.error("");
   console.error("subcommands:");
-  console.error("  distill  <session-path>    run the full pipeline (stage → analyze → distill → merge)");
+  console.error(
+    "  distill  <session-path>    run the full pipeline (stage → analyze → distill → merge)"
+  );
   console.error("  analyze  <session-path>    deterministic analysis only (prints JSON to stdout)");
-  console.error("  stage    <session-path>    stage a session into a tmp workspace (prints layout JSON)");
-  console.error("  file-at  <path> <ix>       print a tracked file's content at a given turn index");
+  console.error(
+    "  stage    <session-path>    stage a session into a tmp workspace (prints layout JSON)"
+  );
+  console.error(
+    "  file-at  <path> <ix>       print a tracked file's content at a given turn index"
+  );
   console.error("  query    <session> <sub>   search within a session log (see 'query --help')");
   console.error("  help                       show this message");
   console.error("");
   console.error("Run 'alembic <subcommand> --help' for subcommand-specific flags.");
   console.error("");
-  console.error("Note: stage, file-at, and query are primarily tools that the staged distiller agent");
-  console.error("calls during a distill run. distill and analyze are the human-facing entry points.");
+  console.error(
+    "Note: stage, file-at, and query are primarily tools that the staged distiller agent"
+  );
+  console.error(
+    "calls during a distill run. distill and analyze are the human-facing entry points."
+  );
 }
 
 main(process.argv).then(

@@ -1,7 +1,7 @@
 // src/agent/distill.ts
 import { lintNarrative } from "./lint.js";
 import { buildSystemPrompt } from "./system-prompt.js";
-import type { AgentRunner } from "./types.js";
+import type { AgentRunResult, AgentRunner } from "./types.js";
 
 /** Options for the distill coordinator. */
 export interface DistillOptions {
@@ -36,7 +36,7 @@ export async function distill(opts: DistillOptions): Promise<DistillResult> {
   let cumulativeOut = 0;
 
   while (true) {
-    let runResult;
+    let runResult: AgentRunResult;
     try {
       runResult = await opts.runner.run({
         tmpDir: opts.tmpDir,

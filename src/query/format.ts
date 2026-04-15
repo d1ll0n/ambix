@@ -9,13 +9,11 @@ export function formatMatches(
   if (format === "count") return `${matches.length}\n`;
   if (format === "full") {
     if (matches.length === 0) return "";
-    return matches.map((m) => JSON.stringify(m)).join("\n") + "\n";
+    return `${matches.map((m) => JSON.stringify(m)).join("\n")}\n`;
   }
   // compact
   if (matches.length === 0) return "";
-  return matches
-    .map((m) => `${String(m.ix).padStart(5, " ")}  ${m.kind}  ${m.summary}`)
-    .join("\n") + "\n";
+  return `${matches.map((m) => `${String(m.ix).padStart(5, " ")}  ${m.kind}  ${m.summary}`).join("\n")}\n`;
 }
 
 /**
@@ -52,7 +50,7 @@ function parsePath(pathStr: string): Array<string | number> {
     if (name.length > 0) out.push(name);
     if (indices) {
       const idxMatches = indices.matchAll(/\[(\d+)\]/g);
-      for (const im of idxMatches) out.push(parseInt(im[1], 10));
+      for (const im of idxMatches) out.push(Number.parseInt(im[1], 10));
     }
   }
   return out;

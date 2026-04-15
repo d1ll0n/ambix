@@ -1,26 +1,21 @@
 // src/stage/condense.ts
-import type {
-  LogEntry,
-  AssistantEntry,
-  UserEntry,
-  ContentBlock,
-} from "parse-claude-logs";
+import type { AssistantEntry, ContentBlock, LogEntry, UserEntry } from "parse-claude-logs";
 import {
   isAssistantEntry,
-  isUserEntry,
-  isSystemEntry,
-  isSummaryEntry,
   isAttachmentEntry,
   isFileHistorySnapshotEntry,
-  isQueueOperationEntry,
+  isImageBlock,
+  isLastPromptEntry,
   isPermissionModeEntry,
   isProgressEntry,
-  isLastPromptEntry,
-  isToolUseBlock,
-  isToolResultBlock,
+  isQueueOperationEntry,
+  isSummaryEntry,
+  isSystemEntry,
   isTextBlock,
   isThinkingBlock,
-  isImageBlock,
+  isToolResultBlock,
+  isToolUseBlock,
+  isUserEntry,
   parsePersistedOutput,
 } from "parse-claude-logs";
 import type { CondensedEntry, RehydrationStub } from "../types.js";
@@ -79,7 +74,7 @@ function condenseOne(
   const condensed: CondensedEntry = {
     ix,
     ref: uuid ? `uuid:${uuid}` : `ix:${ix}`,
-    parent_ix: parentUuid ? uuidToIx.get(parentUuid) ?? null : null,
+    parent_ix: parentUuid ? (uuidToIx.get(parentUuid) ?? null) : null,
     role: roleOf(entry),
     type: entry.type,
     ts,
@@ -186,11 +181,7 @@ function condenseBlock(block: ContentBlock, ix: number, opts: CondenseOptions): 
  * Per-field truncation for tool_use inputs.
  * Small fields stay inline; large string fields become stubs.
  */
-function condenseToolInput(
-  input: unknown,
-  ix: number,
-  opts: CondenseOptions
-): unknown {
+function condenseToolInput(input: unknown, ix: number, opts: CondenseOptions): unknown {
   if (input === null || typeof input !== "object") return input;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
@@ -212,11 +203,7 @@ function condenseToolInput(
  * Tool_result content condensation.
  * Handles string (with persisted-output detection), arrays, and other values.
  */
-function condenseToolResultContent(
-  content: unknown,
-  ix: number,
-  opts: CondenseOptions
-): unknown {
+function condenseToolResultContent(content: unknown, ix: number, opts: CondenseOptions): unknown {
   if (typeof content === "string") {
     const persisted = parsePersistedOutput(content);
     if (persisted) {
@@ -284,7 +271,8 @@ function extractTokens(entry: AssistantEntry): CondensedEntry["tokens"] {
     out: u.output_tokens,
   };
   if (u.cache_read_input_tokens !== undefined) tokens.cache_read = u.cache_read_input_tokens;
-  if (u.cache_creation_input_tokens !== undefined) tokens.cache_write = u.cache_creation_input_tokens;
+  if (u.cache_creation_input_tokens !== undefined)
+    tokens.cache_write = u.cache_creation_input_tokens;
   return tokens;
 }
 

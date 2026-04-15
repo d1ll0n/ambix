@@ -1,15 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stageFileHistory } from "../../src/stage/file-history.js";
-import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-} from "../helpers/fixtures.js";
 import type { SnapshotsIndex } from "../../src/types.js";
+import { cleanupTempDir, joinLines, makeTempDir, writeFixture } from "../helpers/fixtures.js";
 
 describe("stageFileHistory", () => {
   let dir: string;
@@ -79,7 +74,9 @@ describe("stageFileHistory", () => {
     expect(existsSync(path.join(destDir, "blobs", "abc123@v1"))).toBe(true);
     expect(existsSync(path.join(destDir, "blobs", "abc123@v2"))).toBe(true);
 
-    const idx = JSON.parse(readFileSync(path.join(destDir, "snapshots.json"), "utf8")) as SnapshotsIndex;
+    const idx = JSON.parse(
+      readFileSync(path.join(destDir, "snapshots.json"), "utf8")
+    ) as SnapshotsIndex;
     expect(idx.files).toHaveLength(1);
     expect(idx.files[0].path).toBe("src/foo.ts");
     expect(idx.files[0].versions).toHaveLength(2);

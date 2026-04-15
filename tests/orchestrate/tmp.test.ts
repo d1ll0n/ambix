@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { makeTmpWorkspace, cleanupTmpWorkspace } from "../../src/orchestrate/tmp.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cleanupTmpWorkspace, makeTmpWorkspace } from "../../src/orchestrate/tmp.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 describe("tmp lifecycle helpers", () => {
   let dir: string;

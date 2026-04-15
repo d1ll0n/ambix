@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { analyze } from "../../src/analyze/index.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("analyze", () => {
@@ -23,9 +23,24 @@ describe("analyze", () => {
   it("produces a fully-populated AnalyzeResult for a small session", async () => {
     const text = joinLines(
       userLine({ text: "hi" }),
-      assistantLine({ text: "hello", model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50 }),
-      toolUseAssistantLine({ name: "Read", input: { file_path: "src/a.ts" }, inputTokens: 0, outputTokens: 0 }),
-      toolUseAssistantLine({ name: "Bash", input: { command: "git status" }, inputTokens: 0, outputTokens: 0 })
+      assistantLine({
+        text: "hello",
+        model: "claude-sonnet-4-6",
+        inputTokens: 100,
+        outputTokens: 50,
+      }),
+      toolUseAssistantLine({
+        name: "Read",
+        input: { file_path: "src/a.ts" },
+        inputTokens: 0,
+        outputTokens: 0,
+      }),
+      toolUseAssistantLine({
+        name: "Bash",
+        input: { command: "git status" },
+        inputTokens: 0,
+        outputTokens: 0,
+      })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
 

@@ -1,6 +1,6 @@
+import type { AnalyzeResult } from "../analyze/index.js";
 // src/artifact/types.ts
 import type { MetadataJson } from "../types.js";
-import type { AnalyzeResult } from "../analyze/index.js";
 
 /** Top-level final artifact written to ~/.alembic/sessions/<id>/artifact.json. */
 export interface Artifact {

@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clusterBashCommands } from "../../src/analyze/bash-clusters.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
+  makeTempDir,
   toolUseAssistantLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("clusterBashCommands", () => {
@@ -56,7 +56,9 @@ describe("clusterBashCommands", () => {
   it("records the ix of each occurrence, capped at 5 examples per cluster", async () => {
     const lines: string[] = [];
     for (let i = 0; i < 8; i++) {
-      lines.push(toolUseAssistantLine({ name: "Bash", input: { command: `grep pattern${i} file.ts` } }));
+      lines.push(
+        toolUseAssistantLine({ name: "Bash", input: { command: `grep pattern${i} file.ts` } })
+      );
     }
     const text = joinLines(...lines);
     const session = new Session(writeFixture(dir, "session.jsonl", text));
@@ -82,9 +84,7 @@ describe("clusterBashCommands", () => {
   });
 
   it("returns empty array when there are no Bash calls", async () => {
-    const text = joinLines(
-      toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" } })
-    );
+    const text = joinLines(toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" } }));
     const session = new Session(writeFixture(dir, "session.jsonl", text));
     const entries = await session.messages();
 

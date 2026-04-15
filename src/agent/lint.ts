@@ -1,16 +1,16 @@
 // src/agent/lint.ts
-import { readFile, access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type {
-  Narrative,
-  MainTask,
-  Episode,
-  Decision,
   Correction,
+  Decision,
+  Episode,
   FrictionPoint,
-  Win,
+  MainTask,
+  Narrative,
   Unresolved,
   Verification,
+  Win,
 } from "../artifact/types.js";
 
 const TASK_STATUSES = new Set(["completed", "partial", "abandoned", "verified"]);
@@ -57,7 +57,9 @@ export async function lintNarrative(tmpDir: string): Promise<string[]> {
   try {
     narrative = JSON.parse(await readFile(narrativePath, "utf8"));
   } catch (err) {
-    errors.push(`out/narrative.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+    errors.push(
+      `out/narrative.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+    );
     return errors;
   }
 
@@ -93,7 +95,9 @@ export async function lintNarrative(tmpDir: string): Promise<string[]> {
     if (typeof task.title !== "string") errors.push(`${path}.title must be a string`);
     if (typeof task.description !== "string") errors.push(`${path}.description must be a string`);
     if (!TASK_STATUSES.has(task.status)) {
-      errors.push(`${path}.status must be one of ${[...TASK_STATUSES].join(", ")} (got "${task.status}")`);
+      errors.push(
+        `${path}.status must be one of ${[...TASK_STATUSES].join(", ")} (got "${task.status}")`
+      );
     }
     validateRefs(task.refs, `${path}.refs`, validIx, errors);
   });
@@ -102,7 +106,9 @@ export async function lintNarrative(tmpDir: string): Promise<string[]> {
     if (typeof ep.title !== "string") errors.push(`${path}.title must be a string`);
     if (typeof ep.summary !== "string") errors.push(`${path}.summary must be a string`);
     if (!EPISODE_KINDS.has(ep.kind)) {
-      errors.push(`${path}.kind must be one of ${[...EPISODE_KINDS].join(", ")} (got "${ep.kind}")`);
+      errors.push(
+        `${path}.kind must be one of ${[...EPISODE_KINDS].join(", ")} (got "${ep.kind}")`
+      );
     }
     if (!Array.isArray(ep.ix_range) || ep.ix_range.length !== 2) {
       errors.push(`${path}.ix_range must be [start, end]`);
@@ -126,7 +132,9 @@ export async function lintNarrative(tmpDir: string): Promise<string[]> {
   validateArrayField<Correction>(n.corrections, "corrections", errors, (c, path) => {
     if (typeof c.description !== "string") errors.push(`${path}.description must be a string`);
     if (!CORRECTION_KINDS.has(c.kind)) {
-      errors.push(`${path}.kind must be one of ${[...CORRECTION_KINDS].join(", ")} (got "${c.kind}")`);
+      errors.push(
+        `${path}.kind must be one of ${[...CORRECTION_KINDS].join(", ")} (got "${c.kind}")`
+      );
     }
     validateRefs(c.refs, `${path}.refs`, validIx, errors);
   });
@@ -135,7 +143,8 @@ export async function lintNarrative(tmpDir: string): Promise<string[]> {
   if (!v || typeof v !== "object") {
     errors.push("verification must be an object");
   } else {
-    if (typeof v.was_verified !== "boolean") errors.push("verification.was_verified must be a boolean");
+    if (typeof v.was_verified !== "boolean")
+      errors.push("verification.was_verified must be a boolean");
     if (typeof v.how !== "string") errors.push("verification.how must be a string");
     validateRefs(v.refs, "verification.refs", validIx, errors);
   }

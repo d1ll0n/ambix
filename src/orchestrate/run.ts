@@ -1,18 +1,18 @@
+import { tmpdir } from "node:os";
+import path from "node:path";
 // src/orchestrate/run.ts
 import { Session } from "parse-claude-logs";
-import { stage } from "../stage/index.js";
-import { analyze } from "../analyze/index.js";
-import { buildMetadata } from "../stage/metadata.js";
 import { distill } from "../agent/distill.js";
-import { mergeArtifactFromPaths } from "../artifact/merge.js";
 import type { AgentRunner } from "../agent/types.js";
-import { resolveSessionPath } from "./resolve.js";
-import { persistArtifact } from "./persist.js";
-import { makeTmpWorkspace, cleanupTmpWorkspace } from "./tmp.js";
-import { captureDistillerLog } from "./distiller-log-capture.js";
+import { analyze } from "../analyze/index.js";
+import { mergeArtifactFromPaths } from "../artifact/merge.js";
+import { stage } from "../stage/index.js";
+import { buildMetadata } from "../stage/metadata.js";
 import { computeDistillerUsageFromLog } from "./compute-distiller-usage.js";
-import path from "node:path";
-import { tmpdir } from "node:os";
+import { captureDistillerLog } from "./distiller-log-capture.js";
+import { persistArtifact } from "./persist.js";
+import { resolveSessionPath } from "./resolve.js";
+import { cleanupTmpWorkspace, makeTmpWorkspace } from "./tmp.js";
 
 /** Options for the top-level run. */
 export interface RunOptions {

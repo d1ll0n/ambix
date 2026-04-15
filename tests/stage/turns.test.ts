@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeFullTurns } from "../../src/stage/turns.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 describe("writeFullTurns", () => {
   let dir: string;
@@ -16,7 +16,11 @@ describe("writeFullTurns", () => {
   it("writes a JSON file per truncated index, named with 5-digit zero padding", async () => {
     const entries = [
       { type: "user", uuid: "u1", message: { role: "user", content: "hello" } },
-      { type: "assistant", uuid: "a1", message: { role: "assistant", content: [{ type: "text", text: "world" }] } },
+      {
+        type: "assistant",
+        uuid: "a1",
+        message: { role: "assistant", content: [{ type: "text", text: "world" }] },
+      },
       { type: "user", uuid: "u2", message: { role: "user", content: "third" } },
     ];
 

@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { inventorySpills } from "../../src/analyze/spills.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
+  makeTempDir,
   toolResultUserLine,
   toolUseAssistantLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("inventorySpills", () => {
@@ -20,7 +20,8 @@ describe("inventorySpills", () => {
   });
 
   it("collects every <persisted-output> reference in tool_results", async () => {
-    const persisted = `<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/tool-results/toolu_X.json\n\nPreview (first 2KB):\nhi\n`;
+    const persisted =
+      "<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/tool-results/toolu_X.json\n\nPreview (first 2KB):\nhi\n";
     const text = joinLines(
       toolUseAssistantLine({ name: "Bash", input: { command: "ls" }, toolUseId: "toolu_X" }),
       toolResultUserLine({ toolUseId: "toolu_X", content: persisted })

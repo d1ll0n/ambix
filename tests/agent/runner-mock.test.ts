@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { MockAgentRunner } from "../../src/agent/runner-mock.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lintNarrative } from "../../src/agent/lint.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { MockAgentRunner } from "../../src/agent/runner-mock.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 describe("MockAgentRunner", () => {
   let dir: string;
@@ -18,9 +18,18 @@ describe("MockAgentRunner", () => {
     mkdirSync(path.join(dir, "out"), { recursive: true });
     const lines: string[] = [];
     for (let i = 0; i < turnCount; i++) {
-      lines.push(JSON.stringify({ ix: i, ref: `uuid:${i}`, role: "user", type: "user", ts: null, content: `t${i}` }));
+      lines.push(
+        JSON.stringify({
+          ix: i,
+          ref: `uuid:${i}`,
+          role: "user",
+          type: "user",
+          ts: null,
+          content: `t${i}`,
+        })
+      );
     }
-    writeFileSync(path.join(dir, "session.jsonl"), lines.join("\n") + "\n");
+    writeFileSync(path.join(dir, "session.jsonl"), `${lines.join("\n")}\n`);
     writeFileSync(
       path.join(dir, "metadata.json"),
       JSON.stringify({ session_id: "sess", turn_count: turnCount, end_state: "completed" })

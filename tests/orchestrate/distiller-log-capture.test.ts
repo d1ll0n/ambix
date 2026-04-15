@@ -1,8 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { captureDistillerLog, waitForStability } from "../../src/orchestrate/distiller-log-capture.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  captureDistillerLog,
+  waitForStability,
+} from "../../src/orchestrate/distiller-log-capture.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 describe("captureDistillerLog", () => {
   let dir: string;
@@ -51,7 +54,9 @@ describe("captureDistillerLog", () => {
     expect(existsSync(path.join(destDir, "session-uuid-1.jsonl"))).toBe(true);
     expect(existsSync(path.join(destDir, "session-uuid-2.jsonl"))).toBe(true);
     // Subagents subdir carried over
-    expect(existsSync(path.join(destDir, "session-uuid-1", "subagents", "agent-foo.jsonl"))).toBe(true);
+    expect(existsSync(path.join(destDir, "session-uuid-1", "subagents", "agent-foo.jsonl"))).toBe(
+      true
+    );
     // Source project dir removed
     expect(existsSync(ccProjectDir)).toBe(false);
   });
@@ -113,7 +118,11 @@ describe("waitForStability", () => {
       }, 15);
 
       const start = Date.now();
-      await waitForStability(subdir, { pollIntervalMs: 20, timeoutMs: 2000, stableObservations: 2 });
+      await waitForStability(subdir, {
+        pollIntervalMs: 20,
+        timeoutMs: 2000,
+        stableObservations: 2,
+      });
       const elapsed = Date.now() - start;
 
       // The write at 15ms resets stability; we need two more polls (~40ms more),
@@ -141,7 +150,9 @@ describe("waitForStability", () => {
       let content = "";
       while (churn) {
         content += `${n++}\n`; // grows each iteration — size never repeats
-        try { writeFileSync(path.join(subdir, "churn.jsonl"), content); } catch {}
+        try {
+          writeFileSync(path.join(subdir, "churn.jsonl"), content);
+        } catch {}
         await new Promise((r) => setTimeout(r, 10));
       }
     })();
@@ -151,7 +162,7 @@ describe("waitForStability", () => {
       await waitForStability(subdir, { pollIntervalMs: 20, timeoutMs: 200, stableObservations: 3 });
       const elapsed = Date.now() - start;
       expect(elapsed).toBeGreaterThanOrEqual(200);
-      expect(elapsed).toBeLessThan(600);  // doesn't hang indefinitely
+      expect(elapsed).toBeLessThan(600); // doesn't hang indefinitely
     } finally {
       churn = false;
     }

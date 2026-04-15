@@ -1,8 +1,8 @@
 // src/agent/runner-mock.ts
-import { writeFile, readFile, mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AgentRunContext, AgentRunResult, AgentRunner } from "./types.js";
 import type { Narrative } from "../artifact/types.js";
+import type { AgentRunContext, AgentRunResult, AgentRunner } from "./types.js";
 
 /**
  * A mock AgentRunner that produces a minimal valid narrative without

@@ -1,16 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lintNarrative } from "../../src/agent/lint.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
 import type { Narrative } from "../../src/artifact/types.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 function minimalValidNarrative(): Narrative {
   return {
     summary: "Session did the thing.",
-    main_tasks: [
-      { title: "Do the thing", status: "completed", description: "...", refs: [0] },
-    ],
+    main_tasks: [{ title: "Do the thing", status: "completed", description: "...", refs: [0] }],
     episodes: [
       { title: "Start", kind: "implementation", ix_range: [0, 1], summary: "...", refs: [0, 1] },
     ],
@@ -28,9 +26,18 @@ function setupTmp(dir: string, sessionLines: number, narrative: unknown): void {
   writeFileSync(path.join(dir, "out", "narrative.json"), JSON.stringify(narrative));
   const lines: string[] = [];
   for (let i = 0; i < sessionLines; i++) {
-    lines.push(JSON.stringify({ ix: i, ref: `uuid:${i}`, role: "user", type: "user", ts: null, content: `turn ${i}` }));
+    lines.push(
+      JSON.stringify({
+        ix: i,
+        ref: `uuid:${i}`,
+        role: "user",
+        type: "user",
+        ts: null,
+        content: `turn ${i}`,
+      })
+    );
   }
-  writeFileSync(path.join(dir, "session.jsonl"), lines.join("\n") + "\n");
+  writeFileSync(path.join(dir, "session.jsonl"), `${lines.join("\n")}\n`);
 }
 
 describe("lintNarrative", () => {
@@ -50,8 +57,10 @@ describe("lintNarrative", () => {
 
   it("errors when out/narrative.json does not exist", async () => {
     mkdirSync(path.join(dir, "out"), { recursive: true });
-    const lines = [JSON.stringify({ ix: 0, ref: "uuid:0", role: "user", type: "user", ts: null, content: "x" })];
-    writeFileSync(path.join(dir, "session.jsonl"), lines.join("\n") + "\n");
+    const lines = [
+      JSON.stringify({ ix: 0, ref: "uuid:0", role: "user", type: "user", ts: null, content: "x" }),
+    ];
+    writeFileSync(path.join(dir, "session.jsonl"), `${lines.join("\n")}\n`);
     const errors = await lintNarrative(dir);
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.some((e) => /narrative\.json/.test(e))).toBe(true);
@@ -113,7 +122,11 @@ describe("lintNarrative", () => {
   it("accepts friction_points with an attribution field", async () => {
     const n = minimalValidNarrative();
     n.friction_points = [
-      { description: "agent kept rediscovering X", refs: [0], attribution: "user memory candidate" },
+      {
+        description: "agent kept rediscovering X",
+        refs: [0],
+        attribution: "user memory candidate",
+      },
     ];
     setupTmp(dir, 2, n);
     const errors = await lintNarrative(dir);

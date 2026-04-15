@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { queryShow } from "../../src/query/show.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
-  userLine,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("queryShow", () => {

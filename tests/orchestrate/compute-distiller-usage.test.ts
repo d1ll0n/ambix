@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { computeDistillerUsageFromLog } from "../../src/orchestrate/compute-distiller-usage.js";
 import {
-  makeTempDir,
+  assistantLine,
   cleanupTempDir,
   joinLines,
-  assistantLine,
+  makeTempDir,
   userLine,
 } from "../helpers/fixtures.js";
 

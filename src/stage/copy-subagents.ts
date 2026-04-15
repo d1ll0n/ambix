@@ -43,7 +43,7 @@ export async function stageSubagents(
     const condensed = condenseEntries(subEntries, { maxInlineBytes: 2048 });
     const truncated = findTruncatedIndices(condensed);
 
-    const jsonl = condensed.map((e) => JSON.stringify(e)).join("\n") + "\n";
+    const jsonl = `${condensed.map((e) => JSON.stringify(e)).join("\n")}\n`;
     await writeFile(path.join(subDir, "session.jsonl"), jsonl, "utf8");
 
     if (truncated.length > 0) {
@@ -56,7 +56,9 @@ export async function stageSubagents(
   return { staged };
 }
 
-function findTruncatedIndices(condensed: ReadonlyArray<{ ix: number; content: unknown }>): number[] {
+function findTruncatedIndices(
+  condensed: ReadonlyArray<{ ix: number; content: unknown }>
+): number[] {
   const out: number[] = [];
   for (const e of condensed) {
     if (containsTruncationStub(e.content)) out.push(e.ix);

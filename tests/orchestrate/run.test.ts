@@ -1,16 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { run } from "../../src/orchestrate/run.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MockAgentRunner } from "../../src/agent/runner-mock.js";
+import type { Artifact } from "../../src/artifact/types.js";
+import { run } from "../../src/orchestrate/run.js";
 import {
-  makeTempDir,
+  assistantLine,
   cleanupTempDir,
   joinLines,
+  makeTempDir,
   userLine,
-  assistantLine,
 } from "../helpers/fixtures.js";
-import type { Artifact } from "../../src/artifact/types.js";
 
 describe("run end-to-end with mock runner", () => {
   let dir: string;

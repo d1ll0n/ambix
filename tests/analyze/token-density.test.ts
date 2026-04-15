@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildTokenDensityTimeline } from "../../src/analyze/token-density.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("buildTokenDensityTimeline", () => {
@@ -38,10 +38,7 @@ describe("buildTokenDensityTimeline", () => {
   });
 
   it("skips non-assistant entries", async () => {
-    const text = joinLines(
-      userLine({ text: "alone" }),
-      userLine({ text: "also" })
-    );
+    const text = joinLines(userLine({ text: "alone" }), userLine({ text: "also" }));
     const session = new Session(writeFixture(dir, "session.jsonl", text));
     const entries = await session.messages();
 

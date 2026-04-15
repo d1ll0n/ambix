@@ -1,16 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { RealAgentRunner, type StreamedAgentMessage, type QueryFn, resolvePermissionMode } from "../../src/agent/runner-real.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lintNarrative } from "../../src/agent/lint.js";
+import {
+  type QueryFn,
+  RealAgentRunner,
+  type StreamedAgentMessage,
+  resolvePermissionMode,
+} from "../../src/agent/runner-real.js";
 import type { Narrative } from "../../src/artifact/types.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 function validNarrative(turnCount: number): Narrative {
   return {
     summary: `Real distillation of ${turnCount}-turn session.`,
     main_tasks: [{ title: "T", status: "completed", description: "d", refs: [0] }],
-    episodes: [{ title: "E", kind: "other", ix_range: [0, turnCount - 1], summary: "s", refs: [0] }],
+    episodes: [
+      { title: "E", kind: "other", ix_range: [0, turnCount - 1], summary: "s", refs: [0] },
+    ],
     decisions: [],
     corrections: [],
     verification: { was_verified: true, how: "x", refs: [0] },
@@ -24,9 +31,18 @@ function setupTmp(dir: string, turnCount: number): void {
   mkdirSync(path.join(dir, "out"), { recursive: true });
   const lines: string[] = [];
   for (let i = 0; i < turnCount; i++) {
-    lines.push(JSON.stringify({ ix: i, ref: `uuid:${i}`, role: "user", type: "user", ts: null, content: `t${i}` }));
+    lines.push(
+      JSON.stringify({
+        ix: i,
+        ref: `uuid:${i}`,
+        role: "user",
+        type: "user",
+        ts: null,
+        content: `t${i}`,
+      })
+    );
   }
-  writeFileSync(path.join(dir, "session.jsonl"), lines.join("\n") + "\n");
+  writeFileSync(path.join(dir, "session.jsonl"), `${lines.join("\n")}\n`);
   writeFileSync(
     path.join(dir, "metadata.json"),
     JSON.stringify({ session_id: "sess", turn_count: turnCount, end_state: "completed" })
@@ -61,13 +77,22 @@ describe("RealAgentRunner", () => {
       initialMessage: "please distill",
     });
 
-    const opts = capturedOpts as { cwd: string; systemPrompt: string; messages: Array<{ role: string; content: string }>; allowedTools: string[]; model: string; permissionMode: string };
+    const opts = capturedOpts as {
+      cwd: string;
+      systemPrompt: string;
+      messages: Array<{ role: string; content: string }>;
+      allowedTools: string[];
+      model: string;
+      permissionMode: string;
+    };
     expect(opts.cwd).toBe(dir);
     expect(opts.systemPrompt).toBe("you are a distiller");
     expect(opts.messages[0].role).toBe("user");
     expect(opts.messages[0].content).toBe("please distill");
     expect(opts.model).toBe("claude-sonnet-4-6");
-    expect(opts.allowedTools).toEqual(expect.arrayContaining(["Read", "Glob", "Grep", "Bash", "Write"]));
+    expect(opts.allowedTools).toEqual(
+      expect.arrayContaining(["Read", "Glob", "Grep", "Bash", "Write"])
+    );
     expect(typeof opts.permissionMode).toBe("string");
   });
 

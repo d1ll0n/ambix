@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session, parsePersistedOutput } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { condenseEntries } from "../../src/stage/condense.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("condenseEntries — basic", () => {
@@ -68,9 +68,7 @@ describe("condenseEntries — basic", () => {
   });
 
   it("flags synthetic-model assistant entries", async () => {
-    const text = joinLines(
-      assistantLine({ text: "synthetic", model: "<synthetic>" })
-    );
+    const text = joinLines(assistantLine({ text: "synthetic", model: "<synthetic>" }));
     const session = new Session(writeFixture(dir, "session.jsonl", text));
     const entries = await session.messages();
 
@@ -105,7 +103,13 @@ describe("condenseEntries — truncation", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 100 });
 
-    const content = result[0].content as { truncated: true; ref: string; bytes: number; tokens_est: number; preview: string };
+    const content = result[0].content as {
+      truncated: true;
+      ref: string;
+      bytes: number;
+      tokens_est: number;
+      preview: string;
+    };
     expect(content.truncated).toBe(true);
     expect(content.ref).toBe("turns/00000.json");
     expect(content.bytes).toBeGreaterThan(100);
@@ -133,7 +137,12 @@ describe("condenseEntries — truncation", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 100 });
     const blocks = result[0].content as Array<Record<string, unknown>>;
-    const tu = blocks[0] as { type: string; id: string; name: string; input: Record<string, unknown> };
+    const tu = blocks[0] as {
+      type: string;
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    };
 
     expect(tu.type).toBe("tool_use");
     expect(tu.id).toBe("toolu_X");
@@ -144,7 +153,13 @@ describe("condenseEntries — truncation", () => {
     expect(tu.input.new_string).toBe("ok");
 
     // Large field becomes a stub
-    const oldStub = tu.input.old_string as { truncated: boolean; ref: string; bytes: number; tokens_est: number; preview: string };
+    const oldStub = tu.input.old_string as {
+      truncated: boolean;
+      ref: string;
+      bytes: number;
+      tokens_est: number;
+      preview: string;
+    };
     expect(oldStub.truncated).toBe(true);
     expect(oldStub.ref).toBe("turns/00000.json");
     expect(oldStub.bytes).toBeGreaterThan(100);
@@ -154,7 +169,8 @@ describe("condenseEntries — truncation", () => {
   });
 
   it("replaces persisted-output tool_results with a spill stub", async () => {
-    const persisted = `<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/path/tool-results/toolu_X.json\n\nPreview (first 2KB):\nfirst few lines of the spill\n`;
+    const persisted =
+      "<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/path/tool-results/toolu_X.json\n\nPreview (first 2KB):\nfirst few lines of the spill\n";
     // sanity: parse-claude-logs detects this format
     expect(parsePersistedOutput(persisted)).not.toBe(null);
 
@@ -167,9 +183,7 @@ describe("condenseEntries — truncation", () => {
         timestamp: "2026-04-13T10:00:00Z",
         message: {
           role: "user",
-          content: [
-            { type: "tool_result", tool_use_id: "toolu_X", content: persisted },
-          ],
+          content: [{ type: "tool_result", tool_use_id: "toolu_X", content: persisted }],
         },
       })
     );
@@ -178,7 +192,11 @@ describe("condenseEntries — truncation", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 10000 });
     const blocks = result[0].content as Array<Record<string, unknown>>;
-    const tr = blocks[0] as { type: string; tool_use_id: string; result: { truncated: boolean; ref: string; bytes: number; preview: string } };
+    const tr = blocks[0] as {
+      type: string;
+      tool_use_id: string;
+      result: { truncated: boolean; ref: string; bytes: number; preview: string };
+    };
     expect(tr.type).toBe("tool_result");
     expect(tr.tool_use_id).toBe("toolu_X");
     expect(tr.result.truncated).toBe(true);
@@ -189,8 +207,12 @@ describe("condenseEntries — truncation", () => {
 
 describe("condenseEntries — non-message entry preservation", () => {
   let dir: string;
-  beforeEach(() => { dir = makeTempDir(); });
-  afterEach(() => { cleanupTempDir(dir); });
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanupTempDir(dir);
+  });
 
   it("preserves permission-mode entry payload in content", async () => {
     const text = joinLines(
@@ -252,8 +274,12 @@ describe("condenseEntries — non-message entry preservation", () => {
 
 describe("condenseEntries — block-field truncation details", () => {
   let dir: string;
-  beforeEach(() => { dir = makeTempDir(); });
-  afterEach(() => { cleanupTempDir(dir); });
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanupTempDir(dir);
+  });
 
   it("replaces a text block's text field with a stub when too large, keeping the block wrapper", async () => {
     const big = "z".repeat(5000);
@@ -268,7 +294,10 @@ describe("condenseEntries — block-field truncation details", () => {
 
     const result = condenseEntries(entries, { maxInlineBytes: 100 });
     const blocks = result[0].content as Array<Record<string, unknown>>;
-    const tb = blocks[0] as { type: string; text: { truncated: boolean; ref: string; preview: string } };
+    const tb = blocks[0] as {
+      type: string;
+      text: { truncated: boolean; ref: string; preview: string };
+    };
 
     expect(tb.type).toBe("text");
     expect(tb.text.truncated).toBe(true);
@@ -281,7 +310,10 @@ describe("condenseEntries — block-field truncation details", () => {
     const text = joinLines(
       assistantLine({
         contentBlocks: [
-          { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo..." } },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo..." },
+          },
         ],
         uuid: "a1",
       })

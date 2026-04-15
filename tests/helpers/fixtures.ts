@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -122,7 +122,7 @@ export function assistantLine(opts: {
 }
 
 export function joinLines(...lines: string[]): string {
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 /**

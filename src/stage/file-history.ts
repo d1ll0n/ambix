@@ -1,7 +1,7 @@
 // src/stage/file-history.ts
-import { mkdir, copyFile, writeFile, access } from "node:fs/promises";
+import { access, copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Session, LogEntry } from "parse-claude-logs";
+import type { LogEntry, Session } from "parse-claude-logs";
 import { isFileHistorySnapshotEntry } from "parse-claude-logs";
 import type { SnapshotsIndex } from "../types.js";
 
@@ -32,7 +32,10 @@ export async function stageFileHistory(
   const idx: SnapshotsIndex = { files: [] };
 
   // Group by file path
-  const byPath = new Map<string, Array<{ version: number; ix: number; backupTime: string; backupFileName: string | null }>>();
+  const byPath = new Map<
+    string,
+    Array<{ version: number; ix: number; backupTime: string; backupFileName: string | null }>
+  >();
   for (const r of records.values()) {
     if (!byPath.has(r.path)) byPath.set(r.path, []);
     byPath.get(r.path)!.push(r);
@@ -43,7 +46,7 @@ export async function stageFileHistory(
     const out: SnapshotsIndex["files"][number] = { path: filePath, versions: [] };
     for (const v of versions) {
       let blobRel: string | null = null;
-      let bytes: number | null = null;
+      const bytes: number | null = null;
       if (v.backupFileName) {
         const blobSrc = path.join(sessionFhDir, v.backupFileName);
         try {

@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { queryTextSearch } from "../../src/query/text-search.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("queryTextSearch", () => {
@@ -40,9 +40,7 @@ describe("queryTextSearch", () => {
 
   it("finds substring in user string content", async () => {
     const session = await newSession(
-      joinLines(
-        userLine({ text: "permission denied on this file", uuid: "u1" })
-      )
+      joinLines(userLine({ text: "permission denied on this file", uuid: "u1" }))
     );
 
     const matches = await queryTextSearch(session, { pattern: "permission" });
@@ -64,9 +62,7 @@ describe("queryTextSearch", () => {
   });
 
   it("returns empty when no matches", async () => {
-    const session = await newSession(
-      joinLines(userLine({ text: "nothing to see", uuid: "u1" }))
-    );
+    const session = await newSession(joinLines(userLine({ text: "nothing to see", uuid: "u1" })));
     expect(await queryTextSearch(session, { pattern: "nomatch" })).toEqual([]);
   });
 });

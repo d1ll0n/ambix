@@ -1,5 +1,5 @@
 // src/analyze/subagents.ts
-import type { Session, LogEntry } from "parse-claude-logs";
+import type { LogEntry, Session } from "parse-claude-logs";
 import { isAssistantEntry, isToolUseBlock } from "parse-claude-logs";
 import type { SubagentRecord } from "./types.js";
 
@@ -14,9 +14,7 @@ import type { SubagentRecord } from "./types.js";
  *   3. Match by ordinal. Record `parent_ix: null` for any subagent
  *      beyond the number of Task tool_uses.
  */
-export async function crossReferenceSubagents(
-  session: Session
-): Promise<SubagentRecord[]> {
+export async function crossReferenceSubagents(session: Session): Promise<SubagentRecord[]> {
   const parentEntries = await session.messages();
   const subs = await session.subagents();
   if (subs.length === 0) return [];

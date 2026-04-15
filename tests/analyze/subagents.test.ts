@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { crossReferenceSubagents } from "../../src/analyze/subagents.js";
 import {
-  makeTempDir,
+  assistantLine,
   cleanupTempDir,
   joinLines,
-  userLine,
-  assistantLine,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
 } from "../helpers/fixtures.js";
 
 describe("crossReferenceSubagents", () => {
@@ -26,23 +26,35 @@ describe("crossReferenceSubagents", () => {
     mkdirSync(project, { recursive: true });
     const parentUuid = "11111111-1111-1111-1111-111111111111";
     const parentPath = path.join(project, `${parentUuid}.jsonl`);
-    writeFileSync(parentPath, joinLines(
-      userLine({ text: "go", sessionId: parentUuid }),
-      toolUseAssistantLine({
-        name: "Task",
-        input: { subagent_type: "general-purpose", prompt: "do the thing" },
-        sessionId: parentUuid,
-        ts: "2026-04-13T10:00:00Z",
-      })
-    ));
+    writeFileSync(
+      parentPath,
+      joinLines(
+        userLine({ text: "go", sessionId: parentUuid }),
+        toolUseAssistantLine({
+          name: "Task",
+          input: { subagent_type: "general-purpose", prompt: "do the thing" },
+          sessionId: parentUuid,
+          ts: "2026-04-13T10:00:00Z",
+        })
+      )
+    );
 
     const subDir = path.join(project, parentUuid, "subagents");
     mkdirSync(subDir, { recursive: true });
     const agentUuid = "22222222-2222-2222-2222-222222222222";
-    writeFileSync(path.join(subDir, `agent-${agentUuid}.jsonl`), joinLines(
-      userLine({ text: "do the thing", sessionId: agentUuid, ts: "2026-04-13T10:00:01Z" }),
-      assistantLine({ text: "done", sessionId: agentUuid, ts: "2026-04-13T10:00:02Z", inputTokens: 50, outputTokens: 25 })
-    ));
+    writeFileSync(
+      path.join(subDir, `agent-${agentUuid}.jsonl`),
+      joinLines(
+        userLine({ text: "do the thing", sessionId: agentUuid, ts: "2026-04-13T10:00:01Z" }),
+        assistantLine({
+          text: "done",
+          sessionId: agentUuid,
+          ts: "2026-04-13T10:00:02Z",
+          inputTokens: 50,
+          outputTokens: 25,
+        })
+      )
+    );
 
     const session = new Session(parentPath);
     const records = await crossReferenceSubagents(session);
@@ -72,16 +84,15 @@ describe("crossReferenceSubagents", () => {
     mkdirSync(project, { recursive: true });
     const parentUuid = "11111111-1111-1111-1111-111111111111";
     const parentPath = path.join(project, `${parentUuid}.jsonl`);
-    writeFileSync(parentPath, joinLines(
-      userLine({ text: "go", sessionId: parentUuid })
-    ));
+    writeFileSync(parentPath, joinLines(userLine({ text: "go", sessionId: parentUuid })));
 
     const subDir = path.join(project, parentUuid, "subagents");
     mkdirSync(subDir, { recursive: true });
     const agentUuid = "22222222-2222-2222-2222-222222222222";
-    writeFileSync(path.join(subDir, `agent-${agentUuid}.jsonl`), joinLines(
-      userLine({ text: "do", sessionId: agentUuid })
-    ));
+    writeFileSync(
+      path.join(subDir, `agent-${agentUuid}.jsonl`),
+      joinLines(userLine({ text: "do", sessionId: agentUuid }))
+    );
 
     const session = new Session(parentPath);
     const records = await crossReferenceSubagents(session);

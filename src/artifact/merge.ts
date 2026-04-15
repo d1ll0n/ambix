@@ -1,7 +1,7 @@
 // src/artifact/merge.ts
 import { readFile } from "node:fs/promises";
-import type { MetadataJson } from "../types.js";
 import type { AnalyzeResult } from "../analyze/index.js";
+import type { MetadataJson } from "../types.js";
 import type { Artifact, Narrative } from "./types.js";
 
 /** Inputs for building a final artifact from in-memory pieces. */

@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stage } from "../../src/stage/index.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("stage", () => {
@@ -123,7 +123,9 @@ describe("stage", () => {
     expect(existsSync(wrapperPath)).toBe(true);
     const { readFileSync, statSync } = await import("node:fs");
     const wrapper = readFileSync(wrapperPath, "utf8");
-    expect(wrapper.startsWith("#!/bin/bash") || wrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(wrapper.startsWith("#!/bin/bash") || wrapper.startsWith("#!/usr/bin/env bash")).toBe(
+      true
+    );
     expect(wrapper).toContain("lint-cli");
     const mode = statSync(wrapperPath).mode;
     expect(mode & 0o100).not.toBe(0);
@@ -131,7 +133,9 @@ describe("stage", () => {
     const queryWrapperPath = path.join(layout.binDir, "query");
     expect(existsSync(queryWrapperPath)).toBe(true);
     const queryWrapper = readFileSync(queryWrapperPath, "utf8");
-    expect(queryWrapper.startsWith("#!/bin/bash") || queryWrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(
+      queryWrapper.startsWith("#!/bin/bash") || queryWrapper.startsWith("#!/usr/bin/env bash")
+    ).toBe(true);
     expect(queryWrapper).toContain("query/cli");
     const queryMode = statSync(queryWrapperPath).mode;
     expect(queryMode & 0o100).not.toBe(0);
@@ -139,7 +143,9 @@ describe("stage", () => {
     const fileAtWrapperPath = path.join(layout.binDir, "file-at");
     expect(existsSync(fileAtWrapperPath)).toBe(true);
     const fileAtWrapper = readFileSync(fileAtWrapperPath, "utf8");
-    expect(fileAtWrapper.startsWith("#!/bin/bash") || fileAtWrapper.startsWith("#!/usr/bin/env bash")).toBe(true);
+    expect(
+      fileAtWrapper.startsWith("#!/bin/bash") || fileAtWrapper.startsWith("#!/usr/bin/env bash")
+    ).toBe(true);
     expect(fileAtWrapper).toContain("cli.js file-at");
     const fileAtMode = statSync(fileAtWrapperPath).mode;
     expect(fileAtMode & 0o100).not.toBe(0);

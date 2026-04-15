@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { mergeArtifact, mergeArtifactFromPaths } from "../../src/artifact/merge.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
-import type { MetadataJson } from "../../src/types.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AnalyzeResult } from "../../src/analyze/index.js";
+import { mergeArtifact, mergeArtifactFromPaths } from "../../src/artifact/merge.js";
 import type { Narrative } from "../../src/artifact/types.js";
+import type { MetadataJson } from "../../src/types.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 function blankDeterministic(): AnalyzeResult {
   return {

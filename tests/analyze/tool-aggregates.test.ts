@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aggregateToolUse } from "../../src/analyze/tool-aggregates.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
-  userLine,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("aggregateToolUse", () => {
@@ -24,7 +24,10 @@ describe("aggregateToolUse", () => {
       userLine({ text: "hi" }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" } }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "b.ts" } }),
-      toolUseAssistantLine({ name: "Edit", input: { file_path: "a.ts", old_string: "x", new_string: "y" } }),
+      toolUseAssistantLine({
+        name: "Edit",
+        input: { file_path: "a.ts", old_string: "x", new_string: "y" },
+      }),
       toolUseAssistantLine({ name: "Bash", input: { command: "ls" } })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
@@ -39,7 +42,10 @@ describe("aggregateToolUse", () => {
     const text = joinLines(
       toolUseAssistantLine({ name: "Read", input: { file_path: "src/a.ts" } }),
       toolUseAssistantLine({ name: "Read", input: { file_path: "src/a.ts" } }),
-      toolUseAssistantLine({ name: "Edit", input: { file_path: "src/a.ts", old_string: "x", new_string: "y" } }),
+      toolUseAssistantLine({
+        name: "Edit",
+        input: { file_path: "src/a.ts", old_string: "x", new_string: "y" },
+      }),
       toolUseAssistantLine({ name: "Write", input: { file_path: "src/b.ts", content: "hi" } }),
       toolUseAssistantLine({
         name: "MultiEdit",

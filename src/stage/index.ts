@@ -1,16 +1,16 @@
 // src/stage/index.ts
-import { mkdir, writeFile, chmod } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Session } from "parse-claude-logs";
 import { defaultFileHistoryDir } from "parse-claude-logs";
 import type { StageLayout } from "../types.js";
-import { buildMetadata } from "./metadata.js";
 import { condenseEntries } from "./condense.js";
-import { writeFullTurns } from "./turns.js";
 import { collectAndCopySpills } from "./copy-spills.js";
-import { stageFileHistory } from "./file-history.js";
 import { stageSubagents } from "./copy-subagents.js";
+import { stageFileHistory } from "./file-history.js";
+import { buildMetadata } from "./metadata.js";
+import { writeFullTurns } from "./turns.js";
 
 /** Options for the top-level stage() call. */
 export interface StageOptions {
@@ -44,7 +44,7 @@ export async function stage(
   const entries = await session.messages();
   const condensed = condenseEntries(entries, { maxInlineBytes });
   const sessionPath = path.join(tmpDir, "session.jsonl");
-  const jsonl = condensed.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  const jsonl = `${condensed.map((e) => JSON.stringify(e)).join("\n")}\n`;
   await writeFile(sessionPath, jsonl, "utf8");
 
   // 3. Per-turn full files for truncated entries

@@ -1,6 +1,6 @@
 // src/analyze/permissions.ts
 import type { LogEntry } from "parse-claude-logs";
-import { isPermissionModeEntry, isAttachmentEntry } from "parse-claude-logs";
+import { isAttachmentEntry, isPermissionModeEntry } from "parse-claude-logs";
 import type { PermissionEvent } from "./types.js";
 
 const HOOK_ATTACHMENT_KINDS = new Set([
@@ -14,9 +14,7 @@ const HOOK_ATTACHMENT_KINDS = new Set([
  * Collect permission-mode changes and hook-related attachment events
  * into a timeline ordered by ix.
  */
-export function collectPermissionEvents(
-  entries: ReadonlyArray<LogEntry>
-): PermissionEvent[] {
+export function collectPermissionEvents(entries: ReadonlyArray<LogEntry>): PermissionEvent[] {
   const out: PermissionEvent[] = [];
   for (let ix = 0; ix < entries.length; ix++) {
     const entry = entries[ix];

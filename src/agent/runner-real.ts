@@ -77,10 +77,7 @@ export class RealAgentRunner implements AgentRunner {
     this.model = opts.model ?? DEFAULT_MODEL;
     this.maxTurns = opts.maxTurns ?? DEFAULT_MAX_TURNS;
     this.allowedTools = opts.allowedTools ?? DEFAULT_TOOLS;
-    this.permissionMode = resolvePermissionMode(
-      opts.permissionMode,
-      process.getuid?.() === 0,
-    );
+    this.permissionMode = resolvePermissionMode(opts.permissionMode, process.getuid?.() === 0);
   }
 
   async run(ctx: AgentRunContext): Promise<AgentRunResult> {
@@ -152,9 +149,7 @@ const defaultQueryFn: QueryFn = async function* (opts) {
   const sdk = await import("@anthropic-ai/claude-agent-sdk");
 
   // Concatenate multi-message prompts into a single string
-  const prompt = opts.messages
-    .map((m) => m.content)
-    .join("\n\n---\n\n");
+  const prompt = opts.messages.map((m) => m.content).join("\n\n---\n\n");
 
   const stream = sdk.query({
     prompt,
@@ -165,14 +160,22 @@ const defaultQueryFn: QueryFn = async function* (opts) {
       maxTurns: opts.maxTurns,
       allowedTools: opts.allowedTools,
       // Cast to the SDK's enum type — we validated values via resolvePermissionMode
-      permissionMode: opts.permissionMode as "bypassPermissions" | "acceptEdits" | "default" | "plan" | "dontAsk" | "auto",
+      permissionMode: opts.permissionMode as
+        | "bypassPermissions"
+        | "acceptEdits"
+        | "default"
+        | "plan"
+        | "dontAsk"
+        | "auto",
     },
   });
 
   for await (const msg of stream) {
     if (msg.type === "assistant") {
       // msg.message is a BetaMessage; walk its content blocks
-      const content = (msg as { message?: { content?: Array<{ type: string; text?: string; name?: string }> } }).message?.content ?? [];
+      const content =
+        (msg as { message?: { content?: Array<{ type: string; text?: string; name?: string }> } })
+          .message?.content ?? [];
       for (const block of content) {
         if (block.type === "text" && typeof block.text === "string") {
           yield { type: "text", content: block.text };
@@ -192,12 +195,15 @@ const defaultQueryFn: QueryFn = async function* (opts) {
           cache_read_input_tokens?: number;
           cache_creation_input_tokens?: number;
         };
-        modelUsage?: Record<string, {
-          inputTokens?: number;
-          outputTokens?: number;
-          cacheReadInputTokens?: number;
-          cacheCreationInputTokens?: number;
-        }>;
+        modelUsage?: Record<
+          string,
+          {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheReadInputTokens?: number;
+            cacheCreationInputTokens?: number;
+          }
+        >;
         errors?: string[];
       };
       if (r.subtype === "success") {
@@ -221,16 +227,22 @@ function aggregateResultTokens(r: {
     cache_read_input_tokens?: number;
     cache_creation_input_tokens?: number;
   };
-  modelUsage?: Record<string, {
-    inputTokens?: number;
-    outputTokens?: number;
-    cacheReadInputTokens?: number;
-    cacheCreationInputTokens?: number;
-  }>;
+  modelUsage?: Record<
+    string,
+    {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
+    }
+  >;
 }): NonNullable<StreamedAgentMessage["tokens"]> {
   // Prefer per-model aggregated totals (camelCase, multi-turn aggregate)
   if (r.modelUsage && Object.keys(r.modelUsage).length > 0) {
-    let inTok = 0, outTok = 0, cr = 0, cw = 0;
+    let inTok = 0;
+    let outTok = 0;
+    let cr = 0;
+    let cw = 0;
     for (const m of Object.values(r.modelUsage)) {
       inTok += m.inputTokens ?? 0;
       outTok += m.outputTokens ?? 0;
@@ -260,15 +272,12 @@ function aggregateResultTokens(r: {
  *  - Otherwise default to `bypassPermissions` since alembic is invoked
  *    in a controlled, isolated tmp workspace.
  */
-export function resolvePermissionMode(
-  explicit: string | undefined,
-  isRoot: boolean,
-): string {
+export function resolvePermissionMode(explicit: string | undefined, isRoot: boolean): string {
   if (explicit !== undefined) return explicit;
   if (isRoot) {
     console.warn(
       "alembic: running as root, defaulting permissionMode=acceptEdits " +
-      "(bypassPermissions refuses to run under root)",
+        "(bypassPermissions refuses to run under root)"
     );
     return "acceptEdits";
   }

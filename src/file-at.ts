@@ -1,5 +1,5 @@
 // src/file-at.ts
-import { readFile, access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { SnapshotsIndex } from "./types.js";
 
@@ -49,7 +49,7 @@ export async function fileAt(args: FileAtArgs): Promise<FileAtResult> {
   }
 
   const sorted = [...fileEntry.versions].sort((a, b) => a.ix - b.ix);
-  let chosen: typeof sorted[number] | null = null;
+  let chosen: (typeof sorted)[number] | null = null;
   for (const v of sorted) {
     if (v.ix <= args.ix) chosen = v;
     else break;

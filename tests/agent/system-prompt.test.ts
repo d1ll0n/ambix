@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildSystemPrompt } from "../../src/agent/system-prompt.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 const MINIMAL_SESSION_LINE = JSON.stringify({
   ix: 0,
@@ -15,7 +15,7 @@ const MINIMAL_SESSION_LINE = JSON.stringify({
 
 function setupMinimalLayout(dir: string): void {
   writeFileSync(path.join(dir, "metadata.json"), "{}");
-  writeFileSync(path.join(dir, "session.jsonl"), MINIMAL_SESSION_LINE + "\n");
+  writeFileSync(path.join(dir, "session.jsonl"), `${MINIMAL_SESSION_LINE}\n`);
   mkdirSync(path.join(dir, "out"), { recursive: true });
   mkdirSync(path.join(dir, "bin"), { recursive: true });
   writeFileSync(path.join(dir, "bin", "lint-output"), "#!/bin/bash\n");

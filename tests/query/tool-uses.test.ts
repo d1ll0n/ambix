@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { queryToolUses } from "../../src/query/tool-uses.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
-  userLine,
+  makeTempDir,
   toolUseAssistantLine,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("queryToolUses", () => {
@@ -29,7 +29,11 @@ describe("queryToolUses", () => {
       joinLines(
         userLine({ text: "hi", uuid: "u1" }),
         toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" }, uuid: "a1" }),
-        toolUseAssistantLine({ name: "Write", input: { file_path: "b.ts", content: "x" }, uuid: "a2" }),
+        toolUseAssistantLine({
+          name: "Write",
+          input: { file_path: "b.ts", content: "x" },
+          uuid: "a2",
+        }),
         toolUseAssistantLine({ name: "Bash", input: { command: "ls" }, uuid: "a3" })
       )
     );
@@ -46,8 +50,16 @@ describe("queryToolUses", () => {
     const session = await newSession(
       joinLines(
         toolUseAssistantLine({ name: "Read", input: { file_path: "a.ts" }, uuid: "a1" }),
-        toolUseAssistantLine({ name: "Write", input: { file_path: "b.ts", content: "x" }, uuid: "a2" }),
-        toolUseAssistantLine({ name: "Write", input: { file_path: "c.ts", content: "y" }, uuid: "a3" })
+        toolUseAssistantLine({
+          name: "Write",
+          input: { file_path: "b.ts", content: "x" },
+          uuid: "a2",
+        }),
+        toolUseAssistantLine({
+          name: "Write",
+          input: { file_path: "c.ts", content: "y" },
+          uuid: "a3",
+        })
       )
     );
 
@@ -59,7 +71,11 @@ describe("queryToolUses", () => {
   it("summary includes file_path for tool calls with it", async () => {
     const session = await newSession(
       joinLines(
-        toolUseAssistantLine({ name: "Edit", input: { file_path: "src/foo.ts", old_string: "x", new_string: "y" }, uuid: "a1" })
+        toolUseAssistantLine({
+          name: "Edit",
+          input: { file_path: "src/foo.ts", old_string: "x", new_string: "y" },
+          uuid: "a1",
+        })
       )
     );
     const matches = await queryToolUses(session, {});
@@ -69,7 +85,11 @@ describe("queryToolUses", () => {
   it("summary includes first line of command for Bash", async () => {
     const session = await newSession(
       joinLines(
-        toolUseAssistantLine({ name: "Bash", input: { command: "git log --oneline -n 5" }, uuid: "a1" })
+        toolUseAssistantLine({
+          name: "Bash",
+          input: { command: "git log --oneline -n 5" },
+          uuid: "a1",
+        })
       )
     );
     const matches = await queryToolUses(session, {});

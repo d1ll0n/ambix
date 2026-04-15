@@ -1,10 +1,10 @@
 // src/analyze/failures.ts
-import type { LogEntry, ContentBlock } from "parse-claude-logs";
+import type { ContentBlock, LogEntry } from "parse-claude-logs";
 import {
   isAssistantEntry,
-  isUserEntry,
-  isToolUseBlock,
   isToolResultBlock,
+  isToolUseBlock,
+  isUserEntry,
 } from "parse-claude-logs";
 import type { FailureRecord } from "./types.js";
 

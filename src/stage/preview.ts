@@ -18,7 +18,7 @@ export function makePreview(value: unknown, maxChars: number): string {
     text = stableStringify(value);
   }
   if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + " …[truncated]";
+  return `${text.slice(0, maxChars)} …[truncated]`;
 }
 
 function stableStringify(value: unknown): string {

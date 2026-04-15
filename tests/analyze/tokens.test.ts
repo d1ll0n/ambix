@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aggregateTokens } from "../../src/analyze/tokens.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
   userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("aggregateTokens", () => {
@@ -22,8 +22,20 @@ describe("aggregateTokens", () => {
   it("sums input/output/cache tokens per model and overall", async () => {
     const text = joinLines(
       userLine({ text: "hi" }),
-      assistantLine({ text: "a", model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50, cacheReadTokens: 10 }),
-      assistantLine({ text: "b", model: "claude-sonnet-4-6", inputTokens: 200, outputTokens: 75, cacheReadTokens: 20 }),
+      assistantLine({
+        text: "a",
+        model: "claude-sonnet-4-6",
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 10,
+      }),
+      assistantLine({
+        text: "b",
+        model: "claude-sonnet-4-6",
+        inputTokens: 200,
+        outputTokens: 75,
+        cacheReadTokens: 20,
+      }),
       assistantLine({ text: "c", model: "claude-opus-4-6", inputTokens: 500, outputTokens: 300 })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
@@ -50,7 +62,12 @@ describe("aggregateTokens", () => {
 
   it("excludes <synthetic> model entries from per-model counts", async () => {
     const text = joinLines(
-      assistantLine({ text: "real", model: "claude-sonnet-4-6", inputTokens: 100, outputTokens: 50 }),
+      assistantLine({
+        text: "real",
+        model: "claude-sonnet-4-6",
+        inputTokens: 100,
+        outputTokens: 50,
+      }),
       assistantLine({ text: "fake", model: "<synthetic>", inputTokens: 999, outputTokens: 999 })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));

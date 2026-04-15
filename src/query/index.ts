@@ -1,12 +1,12 @@
 // src/query/index.ts
-import { readFile, access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
-import { queryToolUses } from "./tool-uses.js";
-import { queryToolResults } from "./tool-results.js";
-import { queryTextSearch } from "./text-search.js";
-import { queryShow } from "./show.js";
 import { formatMatches } from "./format.js";
+import { queryShow } from "./show.js";
+import { queryTextSearch } from "./text-search.js";
+import { queryToolResults } from "./tool-results.js";
+import { queryToolUses } from "./tool-uses.js";
 import type { QueryOutputFormat } from "./types.js";
 
 async function resolveSessionPath(arg: string): Promise<string> {
@@ -52,7 +52,7 @@ export async function runQuery(args: string[]): Promise<{ code: number; output: 
     case "text-search": {
       const pattern = rest.find((a) => !a.startsWith("--"));
       if (!pattern) {
-        return { code: 1, output: "text-search: missing <pattern>\n" + helpText() };
+        return { code: 1, output: `text-search: missing <pattern>\n${helpText()}` };
       }
       const role = parseFlag(rest, "--role") as "user" | "assistant" | undefined;
       const matches = await queryTextSearch(session, { pattern, role });
@@ -61,7 +61,7 @@ export async function runQuery(args: string[]): Promise<{ code: number; output: 
     case "show": {
       const ixStr = rest.find((a) => !a.startsWith("--"));
       if (!ixStr) {
-        return { code: 1, output: "show: missing <ix>\n" + helpText() };
+        return { code: 1, output: `show: missing <ix>\n${helpText()}` };
       }
       const ix = Number.parseInt(ixStr, 10);
       if (Number.isNaN(ix)) {
@@ -70,8 +70,8 @@ export async function runQuery(args: string[]): Promise<{ code: number; output: 
       const field = parseFlag(rest, "--field");
       const result = await queryShow(session, { ix, field });
       if (result === undefined) return { code: 0, output: "" };
-      if (typeof result === "string") return { code: 0, output: result + "\n" };
-      return { code: 0, output: JSON.stringify(result, null, 2) + "\n" };
+      if (typeof result === "string") return { code: 0, output: `${result}\n` };
+      return { code: 0, output: `${JSON.stringify(result, null, 2)}\n` };
     }
     case "--help":
     case "-h":

@@ -68,7 +68,7 @@ export interface SnapshotsIndex {
     path: string;
     versions: Array<{
       version: number;
-      ix: number;          // first ix at which this version was observed
+      ix: number; // first ix at which this version was observed
       backup_time: string;
       blob: string | null; // relative path under file-history/blobs/, or null
       bytes: number | null;

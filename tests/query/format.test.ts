@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { formatMatches, getFieldByPath } from "../../src/query/format.js";
 import type { QueryMatch } from "../../src/query/types.js";
 

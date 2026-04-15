@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectAndCopySpills } from "../../src/stage/copy-spills.js";
 import {
-  makeTempDir,
-  cleanupTempDir,
-  writeFixture,
-  joinLines,
-  userLine,
   assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  userLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("collectAndCopySpills", () => {
@@ -76,7 +76,8 @@ describe("collectAndCopySpills", () => {
   });
 
   it("silently skips spills whose source file is missing", async () => {
-    const persistedWrapper = `<persisted-output>\nOutput too large (1.2KB). Full output saved to: /nonexistent/path/missing.json\n\nPreview (first 2KB):\nx\n`;
+    const persistedWrapper =
+      "<persisted-output>\nOutput too large (1.2KB). Full output saved to: /nonexistent/path/missing.json\n\nPreview (first 2KB):\nx\n";
     const text = joinLines(
       JSON.stringify({
         type: "user",
@@ -131,9 +132,7 @@ describe("collectAndCopySpills", () => {
           timestamp: "2026-04-13T10:00:00Z",
           message: {
             role: "user",
-            content: [
-              { type: "tool_result", tool_use_id: "toolu_parent", content: parentWrapper },
-            ],
+            content: [{ type: "tool_result", tool_use_id: "toolu_parent", content: parentWrapper }],
           },
         })
       )
@@ -157,9 +156,7 @@ describe("collectAndCopySpills", () => {
           timestamp: "2026-04-13T10:00:10Z",
           message: {
             role: "user",
-            content: [
-              { type: "tool_result", tool_use_id: "toolu_sub", content: subWrapper },
-            ],
+            content: [{ type: "tool_result", tool_use_id: "toolu_sub", content: subWrapper }],
           },
         })
       )

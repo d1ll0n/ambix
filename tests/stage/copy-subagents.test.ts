@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stageSubagents } from "../../src/stage/copy-subagents.js";
 import {
-  makeTempDir,
+  assistantLine,
   cleanupTempDir,
   joinLines,
+  makeTempDir,
   userLine,
-  assistantLine,
 } from "../helpers/fixtures.js";
 
 describe("stageSubagents", () => {
@@ -27,18 +27,24 @@ describe("stageSubagents", () => {
     mkdirSync(project, { recursive: true });
     const parentUuid = "11111111-1111-1111-1111-111111111111";
     const parentPath = path.join(project, `${parentUuid}.jsonl`);
-    writeFileSync(parentPath, joinLines(
-      userLine({ text: "do a thing", uuid: "p1", sessionId: parentUuid }),
-      assistantLine({ text: "ok", uuid: "p2", sessionId: parentUuid })
-    ));
+    writeFileSync(
+      parentPath,
+      joinLines(
+        userLine({ text: "do a thing", uuid: "p1", sessionId: parentUuid }),
+        assistantLine({ text: "ok", uuid: "p2", sessionId: parentUuid })
+      )
+    );
 
     const subDir = path.join(project, parentUuid, "subagents");
     mkdirSync(subDir, { recursive: true });
     const agentUuid = "22222222-2222-2222-2222-222222222222";
-    writeFileSync(path.join(subDir, `agent-${agentUuid}.jsonl`), joinLines(
-      userLine({ text: "subagent task", uuid: "s1", sessionId: agentUuid }),
-      assistantLine({ text: "subagent result", uuid: "s2", sessionId: agentUuid })
-    ));
+    writeFileSync(
+      path.join(subDir, `agent-${agentUuid}.jsonl`),
+      joinLines(
+        userLine({ text: "subagent task", uuid: "s1", sessionId: agentUuid }),
+        assistantLine({ text: "subagent result", uuid: "s2", sessionId: agentUuid })
+      )
+    );
 
     const session = new Session(parentPath);
     await session.messages();

@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { distill } from "../../src/agent/distill.js";
 import { MockAgentRunner } from "../../src/agent/runner-mock.js";
-import { makeTempDir, cleanupTempDir } from "../helpers/fixtures.js";
 import type { AgentRunContext, AgentRunResult, AgentRunner } from "../../src/agent/types.js";
+import { cleanupTempDir, makeTempDir } from "../helpers/fixtures.js";
 
 describe("distill coordinator", () => {
   let dir: string;
@@ -20,9 +20,18 @@ describe("distill coordinator", () => {
     mkdirSync(path.join(dir, "bin"), { recursive: true });
     const lines: string[] = [];
     for (let i = 0; i < turnCount; i++) {
-      lines.push(JSON.stringify({ ix: i, ref: `uuid:${i}`, role: "user", type: "user", ts: null, content: "x" }));
+      lines.push(
+        JSON.stringify({
+          ix: i,
+          ref: `uuid:${i}`,
+          role: "user",
+          type: "user",
+          ts: null,
+          content: "x",
+        })
+      );
     }
-    writeFileSync(path.join(dir, "session.jsonl"), lines.join("\n") + "\n");
+    writeFileSync(path.join(dir, "session.jsonl"), `${lines.join("\n")}\n`);
     writeFileSync(
       path.join(dir, "metadata.json"),
       JSON.stringify({ session_id: "sess", turn_count: turnCount, end_state: "completed" })
@@ -50,7 +59,19 @@ describe("distill coordinator", () => {
         if (attempts < 2) {
           const { writeFile, mkdir } = await import("node:fs/promises");
           await mkdir(path.dirname(outPath), { recursive: true });
-          await writeFile(outPath, JSON.stringify({ main_tasks: [], episodes: [], decisions: [], corrections: [], verification: { was_verified: false, how: "", refs: [] }, friction_points: [], wins: [], unresolved: [] }));
+          await writeFile(
+            outPath,
+            JSON.stringify({
+              main_tasks: [],
+              episodes: [],
+              decisions: [],
+              corrections: [],
+              verification: { was_verified: false, how: "", refs: [] },
+              friction_points: [],
+              wins: [],
+              unresolved: [],
+            })
+          );
         } else {
           await new MockAgentRunner().run(ctx);
         }

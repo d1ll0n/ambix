@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Session } from "parse-claude-logs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectFailures } from "../../src/analyze/failures.js";
 import {
-  makeTempDir,
   cleanupTempDir,
-  writeFixture,
   joinLines,
-  toolUseAssistantLine,
+  makeTempDir,
   toolResultUserLine,
+  toolUseAssistantLine,
+  writeFixture,
 } from "../helpers/fixtures.js";
 
 describe("collectFailures", () => {

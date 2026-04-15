@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { fileAt } from "../src/file-at.js";
-import { makeTempDir, cleanupTempDir } from "./helpers/fixtures.js";
 import type { SnapshotsIndex } from "../src/types.js";
+import { cleanupTempDir, makeTempDir } from "./helpers/fixtures.js";
 
 describe("fileAt", () => {
   let dir: string;

@@ -1,5 +1,5 @@
 // src/agent/tree-view.ts
-import { readdir, stat, readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 /** Produce a compact tree-style summary of a staged alembic tmp dir. */
@@ -128,9 +128,7 @@ function humanSize(bytes: number): string {
 async function sessionInfo(sessionPath: string): Promise<string> {
   try {
     const [s, text] = await Promise.all([stat(sessionPath), readFile(sessionPath, "utf8")]);
-    const lineCount = text
-      .split("\n")
-      .filter((l) => l.trim().length > 0).length;
+    const lineCount = text.split("\n").filter((l) => l.trim().length > 0).length;
     return `(${humanSize(s.size)}, ${lineCount} turns)`;
   } catch {
     return "";
@@ -142,7 +140,7 @@ function truncateMiddle(s: string, maxLen: number): string {
   const keep = maxLen - 3;
   const head = Math.ceil(keep / 2);
   const tail = Math.floor(keep / 2);
-  return s.slice(0, head) + "..." + s.slice(s.length - tail);
+  return `${s.slice(0, head)}...${s.slice(s.length - tail)}`;
 }
 
 function binNote(name: string): string {

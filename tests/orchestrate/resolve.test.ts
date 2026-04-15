@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveSessionPath } from "../../src/orchestrate/resolve.js";
-import { makeTempDir, cleanupTempDir, joinLines, userLine } from "../helpers/fixtures.js";
+import { cleanupTempDir, joinLines, makeTempDir, userLine } from "../helpers/fixtures.js";
 
 describe("resolveSessionPath", () => {
   let dir: string;

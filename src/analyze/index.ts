@@ -1,15 +1,15 @@
 // src/analyze/index.ts
 import type { Session } from "parse-claude-logs";
-import type { AnalyzeResult } from "./types.js";
+import { clusterBashCommands } from "./bash-clusters.js";
+import { collectFailures } from "./failures.js";
+import { buildFileChurnTimeline } from "./file-churn.js";
+import { collectPermissionEvents } from "./permissions.js";
+import { inventorySpills } from "./spills.js";
+import { crossReferenceSubagents } from "./subagents.js";
+import { buildTokenDensityTimeline } from "./token-density.js";
 import { aggregateTokens } from "./tokens.js";
 import { aggregateToolUse } from "./tool-aggregates.js";
-import { clusterBashCommands } from "./bash-clusters.js";
-import { buildFileChurnTimeline } from "./file-churn.js";
-import { collectFailures } from "./failures.js";
-import { buildTokenDensityTimeline } from "./token-density.js";
-import { crossReferenceSubagents } from "./subagents.js";
-import { inventorySpills } from "./spills.js";
-import { collectPermissionEvents } from "./permissions.js";
+import type { AnalyzeResult } from "./types.js";
 
 export * from "./types.js";
 
