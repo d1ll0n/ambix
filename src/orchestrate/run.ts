@@ -130,7 +130,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     return {
       success: false,
       tmpDir,
-      error: err instanceof Error ? err.message : String(err),
+      error: err instanceof Error ? (err.stack ?? err.message) : String(err),
     };
   }
 }
