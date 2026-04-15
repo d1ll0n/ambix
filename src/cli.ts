@@ -40,6 +40,15 @@ async function main(argv: string[]): Promise<number> {
 }
 
 async function runStage(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error("usage: alembic stage <session-path> [--tmp <tmp-dir>]");
+    console.error("");
+    console.error("Stage a session into a tmp workspace. Prints the StageLayout JSON on success.");
+    console.error("");
+    console.error("flags:");
+    console.error("  --tmp <dir>   tmp workspace root (default: $TMPDIR/alembic-<pid>)");
+    return 0;
+  }
   const sessionArg = args[0];
   const tmpArg = parseFlag(args, "--tmp");
   if (!sessionArg) {
@@ -55,6 +64,15 @@ async function runStage(args: string[]): Promise<number> {
 }
 
 async function runFileAt(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error("usage: alembic file-at <path> <ix> [--tmp <tmp-dir>]");
+    console.error("");
+    console.error("Print a tracked file's content as it existed at turn index <ix>.");
+    console.error("");
+    console.error("flags:");
+    console.error("  --tmp <dir>   staged tmp dir (default: cwd)");
+    return 0;
+  }
   const filePath = args[0];
   const ixStr = args[1];
   const tmpArg = parseFlag(args, "--tmp");
@@ -75,6 +93,12 @@ async function runFileAt(args: string[]): Promise<number> {
 }
 
 async function runAnalyze(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error("usage: alembic analyze <session-path>");
+    console.error("");
+    console.error("Deterministic analysis over a session. Prints AnalyzeResult JSON to stdout.");
+    return 0;
+  }
   const sessionArg = args[0];
   if (!sessionArg) {
     console.error("alembic analyze: missing <session-path>");
@@ -88,6 +112,19 @@ async function runAnalyze(args: string[]): Promise<number> {
 }
 
 async function runDistill(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error("usage: alembic distill <session-path> [flags]");
+    console.error("");
+    console.error("Run the full pipeline: stage → analyze → distill → merge → persist.");
+    console.error("");
+    console.error("flags:");
+    console.error("  --output <root>    artifact output root (default: ~/.alembic)");
+    console.error("  --tmp-root <dir>   tmp workspace root (default: $TMPDIR/alembic)");
+    console.error("  --keep-tmp         retain tmp dir on success (always retained on failure)");
+    console.error("  --mock             use MockAgentRunner (skips API calls)");
+    console.error("  --model <id>       model ID passed to RealAgentRunner");
+    return 0;
+  }
   const sessionArg = args[0];
   if (!sessionArg) {
     console.error("alembic distill: missing <session-path>");
@@ -146,6 +183,10 @@ async function runQueryCmd(args: string[]): Promise<number> {
   return code;
 }
 
+function hasHelp(args: string[]): boolean {
+  return args.includes("--help") || args.includes("-h");
+}
+
 function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
@@ -153,16 +194,22 @@ function parseFlag(args: string[], name: string): string | undefined {
 }
 
 function printUsage(): void {
+  console.error("alembic — Claude Code session distillation pipeline");
+  console.error("");
   console.error("usage: alembic <subcommand> [args]");
   console.error("");
   console.error("subcommands:");
-  console.error("  stage <session-path> [--tmp <dir>]   stage a session into a tmp dir");
-  console.error("  file-at <path> <ix> [--tmp <dir>]    print a tracked file's content at a turn");
-  console.error("  analyze <session-path>                 print deterministic analysis JSON");
-  console.error("  distill <session-path> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>]");
-  console.error("                                          run the full pipeline (real runner by default; --mock for placeholder)");
-  console.error("  query <session.jsonl> <subcmd>         search a session log (see 'query --help')");
-  console.error("  help                                  show this message");
+  console.error("  distill  <session-path>    run the full pipeline (stage → analyze → distill → merge)");
+  console.error("  analyze  <session-path>    deterministic analysis only (prints JSON to stdout)");
+  console.error("  stage    <session-path>    stage a session into a tmp workspace (prints layout JSON)");
+  console.error("  file-at  <path> <ix>       print a tracked file's content at a given turn index");
+  console.error("  query    <session> <sub>   search within a session log (see 'query --help')");
+  console.error("  help                       show this message");
+  console.error("");
+  console.error("Run 'alembic <subcommand> --help' for subcommand-specific flags.");
+  console.error("");
+  console.error("Note: stage, file-at, and query are primarily tools that the staged distiller agent");
+  console.error("calls during a distill run. distill and analyze are the human-facing entry points.");
 }
 
 main(process.argv).then(
