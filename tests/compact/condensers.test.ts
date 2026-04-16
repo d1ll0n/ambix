@@ -184,7 +184,7 @@ describe("condenseToolUse — Grep / Glob", () => {
   it("Grep parses match count", () => {
     const line = condenseToolUse(
       "Grep",
-      { pattern: "foo", path: "/home/user/p/src" },
+      { pattern: "foo", path: "/home/dev/p/src" },
       result("Found 12 matches")
     );
     expect(line).toContain("Grep");
