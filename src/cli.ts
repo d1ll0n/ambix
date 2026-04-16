@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // src/cli.ts
+import { writeFile } from "node:fs/promises";
 import { Session } from "parse-claude-logs";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
+import { compactSession } from "./compact/index.js";
 import { fileAt } from "./file-at.js";
 import { resolveSessionPath } from "./orchestrate/resolve.js";
 import { run } from "./orchestrate/run.js";
@@ -27,6 +29,8 @@ async function main(argv: string[]): Promise<number> {
       return runAnalyze(rest);
     case "distill":
       return runDistill(rest);
+    case "compact":
+      return runCompact(rest);
     case "query":
       return runQueryCmd(rest);
     case "--help":
@@ -251,6 +255,67 @@ async function runDistill(args: string[]): Promise<number> {
   return 0;
 }
 
+async function runCompact(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error(
+      "usage: alembic compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+    );
+    console.error("");
+    console.error(
+      "Produce a chronological, per-round summary of a session for context recovery."
+    );
+    console.error(
+      "Each round, tool_use, and assistant text block is tagged with a rehydration"
+    );
+    console.error(
+      "index (the same ix `alembic query <session> <ix>` resolves to), so an agent"
+    );
+    console.error("loading the compact output can pull full details for any entry on demand.");
+    console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
+    console.error("flags:");
+    console.error("  --format xml|markdown   output format (default: xml)");
+    console.error("  --output <file>         write to file instead of stdout");
+    return 0;
+  }
+  const sessionArg = args[0];
+  if (!sessionArg) {
+    console.error("alembic compact: missing <session-path-or-id>");
+    console.error(
+      "usage: alembic compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+    );
+    return 1;
+  }
+  const formatArg = parseFlag(args, "--format") ?? "xml";
+  if (formatArg !== "xml" && formatArg !== "markdown") {
+    console.error(`alembic compact: invalid --format: ${formatArg} (expected xml or markdown)`);
+    return 1;
+  }
+  const outputArg = parseFlag(args, "--output");
+
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`alembic compact: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+
+  const session = new Session(sessionPath);
+  const { content, stats } = await compactSession(session, { format: formatArg });
+
+  if (outputArg) {
+    await writeFile(outputArg, content, "utf8");
+    console.error(
+      `wrote compact (${formatArg}, ${stats.rounds} rounds, ${stats.toolUses} tool uses) to ${outputArg}`
+    );
+  } else {
+    process.stdout.write(content);
+  }
+  return 0;
+}
+
 async function runQueryCmd(args: string[]): Promise<number> {
   const { code, output } = await runQuery(args);
   process.stdout.write(output);
@@ -283,10 +348,15 @@ function printUsage(): void {
     "  stage    <session-path-or-id>    stage a session into a tmp workspace (prints layout JSON)"
   );
   console.error(
-    "  file-at  <path> <ix>       print a tracked file's content at a given turn index"
+    "  compact  <session-path-or-id>    chronological per-round summary for context recovery"
   );
-  console.error("  query    <session> <sub>   search within a session log (see 'query --help')");
-  console.error("  help                       show this message");
+  console.error(
+    "  file-at  <path> <ix>             print a tracked file's content at a given turn index"
+  );
+  console.error(
+    "  query    <session> [sub]         search a session log; bare ix works: `query <session> 42`"
+  );
+  console.error("  help                             show this message");
   console.error("");
   console.error("Run 'alembic <subcommand> --help' for subcommand-specific flags.");
   console.error("");
@@ -294,7 +364,7 @@ function printUsage(): void {
     "Note: stage, file-at, and query are primarily tools that the staged distiller agent"
   );
   console.error(
-    "calls during a distill run. distill and analyze are the human-facing entry points."
+    "calls during a distill run. distill, analyze, and compact are the human-facing entry points."
   );
 }
 

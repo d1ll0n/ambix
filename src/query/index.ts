@@ -2,6 +2,7 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Session } from "parse-claude-logs";
+import { resolveSessionPath as resolveGlobalSessionPath } from "../orchestrate/resolve.js";
 import { formatMatches } from "./format.js";
 import { queryShow } from "./show.js";
 import { queryTextSearch } from "./text-search.js";
@@ -9,8 +10,17 @@ import { queryToolResults } from "./tool-results.js";
 import { queryToolUses } from "./tool-uses.js";
 import type { QueryOutputFormat } from "./types.js";
 
+/**
+ * Resolve a session argument to a `.jsonl` path.
+ *
+ * Priority:
+ *   1. If cwd has a `metadata.json` with a matching `query_targets` entry,
+ *      use that (staged-workspace mode — the distiller agent uses this).
+ *   2. Otherwise delegate to the global resolver, which handles absolute
+ *      paths, relative paths, and bare session UUIDs / UUID prefixes via
+ *      `findAllSessions` across `~/.claude/projects`.
+ */
 async function resolveSessionPath(arg: string): Promise<string> {
-  // If cwd has a metadata.json with a matching query_targets entry, use it
   const metadataPath = path.join(process.cwd(), "metadata.json");
   try {
     await access(metadataPath);
@@ -23,14 +33,22 @@ async function resolveSessionPath(arg: string): Promise<string> {
   } catch {
     // no metadata.json or unreadable — fall through
   }
-  return arg;
+  return await resolveGlobalSessionPath(arg);
 }
 
 /** Run one of the query subcommands and return a string to print. */
 export async function runQuery(args: string[]): Promise<{ code: number; output: string }> {
-  const [sessionPathArg, subcommand, ...rest] = args;
+  let [sessionPathArg, subcommand, ...rest] = args;
   if (!sessionPathArg || !subcommand || sessionPathArg === "--help" || sessionPathArg === "-h") {
     return { code: sessionPathArg ? 0 : 1, output: helpText() };
+  }
+
+  // Shorthand: `alembic query <session> 42` is rewritten to `show 42`.
+  // Useful when the compaction XML emits `idx="N"` attributes — lets the
+  // consuming agent rehydrate a specific entry with a bare-integer arg.
+  if (/^\d+$/.test(subcommand)) {
+    rest = [subcommand, ...rest];
+    subcommand = "show";
   }
 
   const sessionPath = await resolveSessionPath(sessionPathArg);
