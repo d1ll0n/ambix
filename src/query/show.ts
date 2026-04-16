@@ -1,5 +1,5 @@
 // src/query/show.ts
-import type { Session } from "parse-claude-logs";
+import type { Session } from "parse-cc";
 import { getFieldByPath } from "./format.js";
 
 /** Options for the show query. */

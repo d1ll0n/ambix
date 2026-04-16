@@ -20,7 +20,7 @@ describe("captureDistillerLog", () => {
     // Fake CC home
     const ccHome = path.join(dir, "cc-home");
     // Fake tmp dir whose slugified form is the CC projects dir name
-    const tmpDir = path.join(dir, "alembic-work", "sess-abc");
+    const tmpDir = path.join(dir, "ambix-work", "sess-abc");
     // Slug replaces '/' with '-'
     const slug = tmpDir.replace(/\//g, "-");
     const ccProjectDir = path.join(ccHome, "projects", slug);
@@ -36,7 +36,7 @@ describe("captureDistillerLog", () => {
       '{"sub":true}\n'
     );
 
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
 
     const result = await captureDistillerLog({
       tmpDir,
@@ -64,7 +64,7 @@ describe("captureDistillerLog", () => {
   it("returns filesCaptured=0 and does nothing when the source project dir does not exist", async () => {
     const ccHome = path.join(dir, "cc-home");
     const tmpDir = path.join(dir, "nonexistent-work");
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
 
     const result = await captureDistillerLog({
       tmpDir,

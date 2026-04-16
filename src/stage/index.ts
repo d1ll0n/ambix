@@ -2,8 +2,8 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Session } from "parse-claude-logs";
-import { defaultFileHistoryDir } from "parse-claude-logs";
+import type { Session } from "parse-cc";
+import { defaultFileHistoryDir } from "parse-cc";
 import type { StageLayout } from "../types.js";
 import { condenseEntriesWithStats } from "./condense.js";
 import { collectAndCopySpills } from "./copy-spills.js";

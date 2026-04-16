@@ -1,6 +1,6 @@
 // src/analyze/permissions.ts
-import type { LogEntry } from "parse-claude-logs";
-import { isAttachmentEntry, isPermissionModeEntry } from "parse-claude-logs";
+import type { LogEntry } from "parse-cc";
+import { isAttachmentEntry, isPermissionModeEntry } from "parse-cc";
 import type { PermissionEvent } from "./types.js";
 
 const HOOK_ATTACHMENT_KINDS = new Set([

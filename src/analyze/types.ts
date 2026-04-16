@@ -1,5 +1,5 @@
 // src/analyze/types.ts
-import type { CompactionPhase } from "parse-claude-logs";
+import type { CompactionPhase } from "parse-cc";
 
 /** Per-model token breakdown, with message count. */
 export interface ModelTokens {

@@ -1,13 +1,13 @@
 // src/compact/index.ts
 //
-// Top-level entry point for the `alembic compact` subcommand. Produces
+// Top-level entry point for the `ambix compact` subcommand. Produces
 // a chronological, per-round summary of a Claude Code session with
 // condensed tool_use lines and rehydration indices — intended as a
 // context-recovery artifact that a new agent session can load in place
 // of Claude Code's built-in /compact output.
 
-import type { LogEntry, Session, ToolResultBlock } from "parse-claude-logs";
-import { isAssistantEntry, isTextBlock, isToolUseBlock } from "parse-claude-logs";
+import type { LogEntry, Session, ToolResultBlock } from "parse-cc";
+import { isAssistantEntry, isTextBlock, isToolUseBlock } from "parse-cc";
 import { estTokens } from "./condensers.js";
 import { type CompactFormat, renderCompact } from "./render.js";
 import {

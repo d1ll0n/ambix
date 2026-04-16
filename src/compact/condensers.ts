@@ -1,18 +1,18 @@
 // src/compact/condensers.ts
 //
-// Per-tool "one-liner" renderers used by `alembic compact`. Each takes
+// Per-tool "one-liner" renderers used by `ambix compact`. Each takes
 // a tool_use's input plus its (optional) tool_result and returns a
 // short human-readable summary. The goal is to preserve the intent of
 // each call (what file, what command, how big the output was) without
 // carrying the full payloads.
 
-import type { ToolResultBlock } from "parse-claude-logs";
+import type { ToolResultBlock } from "parse-cc";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/** Rough token estimate — chars/4 matches alembic's other token math. */
+/** Rough token estimate — chars/4 matches ambix's other token math. */
 export function estTokens(s: string): number {
   return Math.round(s.length / 4);
 }

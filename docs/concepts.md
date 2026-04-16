@@ -1,10 +1,10 @@
 # Concepts
 
-This document walks through the alembic pipeline in detail and describes the shape of the final artifact. For the high-level overview, see the [README](../README.md).
+This document walks through the ambix pipeline in detail and describes the shape of the final artifact. For the high-level overview, see the [README](../README.md).
 
 ## Pipeline
 
-Alembic processes a Claude Code session JSONL file through four stages:
+Ambix processes a Claude Code session JSONL file through four stages:
 
 ```
 session.jsonl
@@ -16,7 +16,7 @@ session.jsonl
 └─────────┘     └──────────┘     └────────────┘     └─────────────┘
     │               │                  │                   │
     ▼               ▼                  ▼                   ▼
-  tmp dir       AnalyzeResult     narrative.json      ~/.alembic/
+  tmp dir       AnalyzeResult     narrative.json      ~/.ambix/
 ```
 
 ### 1. Stage
@@ -79,7 +79,7 @@ interface Artifact {
 }
 ```
 
-`persistArtifact()` writes the artifact to `~/.alembic/<session-id>/artifact.json` by default (override via `outputRoot`).
+`persistArtifact()` writes the artifact to `~/.ambix/<session-id>/artifact.json` by default (override via `outputRoot`).
 
 ## Running the full pipeline
 
@@ -87,9 +87,9 @@ interface Artifact {
 
 ## Agent tools
 
-During a distill run, the distiller agent is given access to alembic subcommands as callable tools:
+During a distill run, the distiller agent is given access to ambix subcommands as callable tools:
 
-- `alembic file-at <path> <ix> --tmp <staged-dir>` — fetch a file version at a given turn
-- `alembic query <session> <subcmd>` — search the source session for messages, tool uses, etc.
+- `ambix file-at <path> <ix> --tmp <staged-dir>` — fetch a file version at a given turn
+- `ambix query <session> <subcmd>` — search the source session for messages, tool uses, etc.
 
 These are CLI subcommands that also exist for human debugging but are primarily shaped for agent consumption. Their output is machine-readable and their flags are documented via `<subcommand> --help`.

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectAndCopySpills } from "../../src/stage/copy-spills.js";
 import {

@@ -1,6 +1,6 @@
 // src/analyze/tool-aggregates.ts
-import type { LogEntry } from "parse-claude-logs";
-import { isAssistantEntry, isToolUseBlock } from "parse-claude-logs";
+import type { LogEntry } from "parse-cc";
+import { isAssistantEntry, isToolUseBlock } from "parse-cc";
 import type { FileRecord, FilesSummary, ToolsSummary } from "./types.js";
 
 /** Output of tool-use aggregation. */

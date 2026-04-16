@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 // src/orchestrate/run.ts
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { distill } from "../agent/distill.js";
 import type { AgentRunner } from "../agent/types.js";
 import { analyze } from "../analyze/index.js";
@@ -18,9 +18,9 @@ import { cleanupTmpWorkspace, makeTmpWorkspace } from "./tmp.js";
 export interface RunOptions {
   /** Session argument: an absolute path or path relative to cwd. */
   session: string;
-  /** Output root. Default ~/.alembic. */
+  /** Output root. Default ~/.ambix. */
   outputRoot?: string;
-  /** Tmp workspace root. Default $TMPDIR/alembic. */
+  /** Tmp workspace root. Default $TMPDIR/ambix. */
   tmpRoot?: string;
   /** Agent runner to use. Required. */
   runner: AgentRunner;
@@ -54,7 +54,7 @@ export interface RunResult {
 }
 
 /**
- * Run the full alembic pipeline against a session:
+ * Run the full ambix pipeline against a session:
  *   1. Resolve the session path
  *   2. Stage into a tmp dir
  *   3. Analyze deterministically
@@ -69,7 +69,7 @@ export async function run(opts: RunOptions): Promise<RunResult> {
   // Prime session metadata so we know the session id for tmp naming
   await session.messages();
 
-  const tmpRoot = opts.tmpRoot ?? path.join(tmpdir(), "alembic");
+  const tmpRoot = opts.tmpRoot ?? path.join(tmpdir(), "ambix");
   const tmpDir = await makeTmpWorkspace({ root: tmpRoot, sessionId: session.sessionId });
 
   try {

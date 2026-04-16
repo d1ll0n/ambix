@@ -2,7 +2,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-/** Produce a compact tree-style summary of a staged alembic tmp dir. */
+/** Produce a compact tree-style summary of a staged ambix tmp dir. */
 export async function buildTreeView(tmpDir: string): Promise<string> {
   const lines: string[] = [];
   lines.push("```");

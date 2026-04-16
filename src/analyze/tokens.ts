@@ -1,6 +1,6 @@
 // src/analyze/tokens.ts
-import type { Session } from "parse-claude-logs";
-import { isAssistantEntry } from "parse-claude-logs";
+import type { Session } from "parse-cc";
+import { isAssistantEntry } from "parse-cc";
 import type { ModelTokens, TokensSummary } from "./types.js";
 
 /**

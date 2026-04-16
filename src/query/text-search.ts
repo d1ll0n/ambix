@@ -1,6 +1,6 @@
 // src/query/text-search.ts
-import type { ContentBlock, Session } from "parse-claude-logs";
-import { isAssistantEntry, isUserEntry } from "parse-claude-logs";
+import type { ContentBlock, Session } from "parse-cc";
+import { isAssistantEntry, isUserEntry } from "parse-cc";
 import type { QueryMatch } from "./types.js";
 
 /** Options for the text-search query. */

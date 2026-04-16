@@ -60,7 +60,7 @@ describe("persistArtifact", () => {
   });
 
   it("writes the artifact to <outputRoot>/sessions/<session-id>/artifact.json", async () => {
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
     const artifact = mockArtifact();
     const written = await persistArtifact(artifact, { outputRoot });
 
@@ -80,7 +80,7 @@ describe("persistArtifact", () => {
   });
 
   it("overwrites an existing artifact file", async () => {
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
     await persistArtifact(mockArtifact(), { outputRoot });
     const updated = mockArtifact();
     updated.narrative.summary = "updated";

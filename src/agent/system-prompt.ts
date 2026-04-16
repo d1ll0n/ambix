@@ -68,7 +68,7 @@ ${sessionInputBullet}
 - \`turns/NNNNN.json\` — full untruncated entries for turns whose content was truncated inline in session.jsonl. Accessible via Read when a truncation stub references them.
 - \`spill/toolu_*.json\` (or .txt) — full content of tool results that were too large to inline (off-log files copied in from the source session). Accessible via Read.
 - \`subagents/agent-<uuid>/session.jsonl\` — the full condensed log of each subagent, in the same format as the parent. **Important**: the parent log only contains the \`Task\` tool_use (with the prompt that was sent to the subagent) and its tool_result (the subagent's final return message). The subagent's full conversation — all intermediate tool calls, reasoning, partial findings, multi-step work — lives ONLY in its own \`session.jsonl\` here. If the parent's Task tool_use / tool_result pair doesn't give you enough to describe what a subagent actually did, you MUST rehydrate the subagent file to learn more. Discover with \`Glob("subagents/*/session.jsonl")\`.
-- \`file-history/\` — staged file-history blobs for tracked files. Use \`bin/file-at <path> <ix>\` to read a tracked file's state at a given turn index. (Note: the CLI is \`alembic file-at\`, invokable via Bash if it's on PATH, or via the \`file-at\` wrapper in bin/ — check \`bin/\` for available tools.)
+- \`file-history/\` — staged file-history blobs for tracked files. Use \`bin/file-at <path> <ix>\` to read a tracked file's state at a given turn index. (Note: the CLI is \`ambix file-at\`, invokable via Bash if it's on PATH, or via the \`file-at\` wrapper in bin/ — check \`bin/\` for available tools.)
 
 ## Truncation stubs
 

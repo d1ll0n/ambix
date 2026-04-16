@@ -1,12 +1,12 @@
 {
-  "name": "alembic",
+  "name": "ambix",
   "version": "0.0.1",
   "description": "Session distillation pipeline for Claude Code logs — analyzes, stages, and produces structured summary artifacts for downstream agent review.",
   "license": "MIT",
   "author": "Dillon",
   "repository": {
     "type": "git",
-    "url": "https://github.com/d1ll0n/alembic"
+    "url": "https://github.com/d1ll0n/ambix"
   },
   "keywords": [
     "claude-code",
@@ -32,7 +32,7 @@
     "dist"
   ],
   "bin": {
-    "alembic": "./dist/cli.js"
+    "ambix": "./dist/cli.js"
   },
   "engines": {
     "node": ">=22"
@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
-    "parse-claude-logs": "file:../parse-claude-logs"
+    "parse-cc": "^0.1.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

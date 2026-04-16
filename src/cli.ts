@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // src/cli.ts
 import { writeFile } from "node:fs/promises";
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
@@ -39,7 +39,7 @@ async function main(argv: string[]): Promise<number> {
       printUsage();
       return 0;
     default:
-      console.error(`alembic: unknown subcommand: ${subcommand}`);
+      console.error(`ambix: unknown subcommand: ${subcommand}`);
       printUsage();
       return 1;
   }
@@ -48,7 +48,7 @@ async function main(argv: string[]): Promise<number> {
 async function runStage(args: string[]): Promise<number> {
   if (hasHelp(args)) {
     console.error(
-      "usage: alembic stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
+      "usage: ambix stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
     );
     console.error("");
     console.error("Stage a session into a tmp workspace. Prints the StageLayout JSON on success.");
@@ -56,9 +56,7 @@ async function runStage(args: string[]): Promise<number> {
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
     console.error("flags:");
-    console.error(
-      "  --tmp <dir>               tmp workspace root (default: $TMPDIR/alembic-<pid>)"
-    );
+    console.error("  --tmp <dir>               tmp workspace root (default: $TMPDIR/ambix-<pid>)");
     console.error("  --max-inline-bytes <N>    inline budget in bytes for tool_results / text");
     console.error("                            and per-field tool_use inputs (default 2048)");
     console.error("  -v, --verbose             print a condensation report (per-kind counts,");
@@ -71,9 +69,9 @@ async function runStage(args: string[]): Promise<number> {
   const maxInlineBytesArg = parseFlag(args, "--max-inline-bytes");
   const verbose = args.includes("--verbose") || args.includes("-v");
   if (!sessionArg) {
-    console.error("alembic stage: missing <session-path-or-id>");
+    console.error("ambix stage: missing <session-path-or-id>");
     console.error(
-      "usage: alembic stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
+      "usage: ambix stage <session-path-or-id> [--tmp <tmp-dir>] [--max-inline-bytes <N>] [-v|--verbose]"
     );
     return 1;
   }
@@ -81,7 +79,7 @@ async function runStage(args: string[]): Promise<number> {
   if (maxInlineBytesArg !== undefined) {
     maxInlineBytes = Number.parseInt(maxInlineBytesArg, 10);
     if (Number.isNaN(maxInlineBytes) || maxInlineBytes < 0) {
-      console.error(`alembic stage: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
+      console.error(`ambix stage: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
       return 1;
     }
   }
@@ -89,11 +87,11 @@ async function runStage(args: string[]): Promise<number> {
   try {
     sessionPath = await resolveSessionPath(sessionArg);
   } catch (err) {
-    console.error(`alembic stage: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`ambix stage: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
   const session = new Session(sessionPath);
-  const tmpDir = tmpArg ?? `${process.env.TMPDIR ?? "/tmp"}/alembic-${process.pid}`;
+  const tmpDir = tmpArg ?? `${process.env.TMPDIR ?? "/tmp"}/ambix-${process.pid}`;
   const layout = await stage(session, tmpDir, { maxInlineBytes });
   if (verbose && layout.condenseStats) {
     process.stderr.write(
@@ -108,7 +106,7 @@ async function runStage(args: string[]): Promise<number> {
 
 async function runFileAt(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic file-at <path> <ix> [--tmp <tmp-dir>]");
+    console.error("usage: ambix file-at <path> <ix> [--tmp <tmp-dir>]");
     console.error("");
     console.error("Print a tracked file's content as it existed at turn index <ix>.");
     console.error("");
@@ -120,13 +118,13 @@ async function runFileAt(args: string[]): Promise<number> {
   const ixStr = args[1];
   const tmpArg = parseFlag(args, "--tmp");
   if (!filePath || !ixStr) {
-    console.error("alembic file-at: missing arguments");
-    console.error("usage: alembic file-at <path> <ix> [--tmp <tmp-dir>]");
+    console.error("ambix file-at: missing arguments");
+    console.error("usage: ambix file-at <path> <ix> [--tmp <tmp-dir>]");
     return 1;
   }
   const ix = Number.parseInt(ixStr, 10);
   if (Number.isNaN(ix)) {
-    console.error(`alembic file-at: invalid ix: ${ixStr}`);
+    console.error(`ambix file-at: invalid ix: ${ixStr}`);
     return 1;
   }
   const tmp = tmpArg ?? process.cwd();
@@ -137,7 +135,7 @@ async function runFileAt(args: string[]): Promise<number> {
 
 async function runAnalyze(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic analyze <session-path-or-id>");
+    console.error("usage: ambix analyze <session-path-or-id>");
     console.error("");
     console.error("Deterministic analysis over a session. Prints AnalyzeResult JSON to stdout.");
     console.error("");
@@ -146,15 +144,15 @@ async function runAnalyze(args: string[]): Promise<number> {
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("alembic analyze: missing <session-path-or-id>");
-    console.error("usage: alembic analyze <session-path-or-id>");
+    console.error("ambix analyze: missing <session-path-or-id>");
+    console.error("usage: ambix analyze <session-path-or-id>");
     return 1;
   }
   let sessionPath: string;
   try {
     sessionPath = await resolveSessionPath(sessionArg);
   } catch (err) {
-    console.error(`alembic analyze: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`ambix analyze: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
   const session = new Session(sessionPath);
@@ -165,15 +163,15 @@ async function runAnalyze(args: string[]): Promise<number> {
 
 async function runDistill(args: string[]): Promise<number> {
   if (hasHelp(args)) {
-    console.error("usage: alembic distill <session-path-or-id> [flags]");
+    console.error("usage: ambix distill <session-path-or-id> [flags]");
     console.error("");
     console.error("Run the full pipeline: stage → analyze → distill → merge → persist.");
     console.error("");
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
     console.error("flags:");
-    console.error("  --output <root>           artifact output root (default: ~/.alembic)");
-    console.error("  --tmp-root <dir>          tmp workspace root (default: $TMPDIR/alembic)");
+    console.error("  --output <root>           artifact output root (default: ~/.ambix)");
+    console.error("  --tmp-root <dir>          tmp workspace root (default: $TMPDIR/ambix)");
     console.error(
       "  --keep-tmp                retain tmp dir on success (always retained on failure)"
     );
@@ -188,9 +186,9 @@ async function runDistill(args: string[]): Promise<number> {
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("alembic distill: missing <session-path-or-id>");
+    console.error("ambix distill: missing <session-path-or-id>");
     console.error(
-      "usage: alembic distill <session-path-or-id> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>] [--max-inline-bytes <N>] [-v|--verbose]"
+      "usage: ambix distill <session-path-or-id> [--output <root>] [--tmp-root <dir>] [--keep-tmp] [--mock] [--model <id>] [--max-inline-bytes <N>] [-v|--verbose]"
     );
     return 1;
   }
@@ -206,7 +204,7 @@ async function runDistill(args: string[]): Promise<number> {
   if (maxInlineBytesArg !== undefined) {
     maxInlineBytes = Number.parseInt(maxInlineBytesArg, 10);
     if (Number.isNaN(maxInlineBytes) || maxInlineBytes < 0) {
-      console.error(`alembic distill: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
+      console.error(`ambix distill: invalid --max-inline-bytes: ${maxInlineBytesArg}`);
       return 1;
     }
   }
@@ -224,7 +222,7 @@ async function runDistill(args: string[]): Promise<number> {
   });
 
   if (!result.success) {
-    console.error("alembic distill: failed");
+    console.error("ambix distill: failed");
     if (result.error) console.error(`  error: ${result.error}`);
     if (result.lintErrors) {
       console.error("  lint errors:");
@@ -258,12 +256,12 @@ async function runDistill(args: string[]): Promise<number> {
 async function runCompact(args: string[]): Promise<number> {
   if (hasHelp(args)) {
     console.error(
-      "usage: alembic compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     console.error("");
     console.error("Produce a chronological, per-round summary of a session for context recovery.");
     console.error("Each round, tool_use, and assistant text block is tagged with a rehydration");
-    console.error("index (the same ix `alembic query <session> <ix>` resolves to), so an agent");
+    console.error("index (the same ix `ambix query <session> <ix>` resolves to), so an agent");
     console.error("loading the compact output can pull full details for any entry on demand.");
     console.error("");
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
@@ -275,15 +273,15 @@ async function runCompact(args: string[]): Promise<number> {
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("alembic compact: missing <session-path-or-id>");
+    console.error("ambix compact: missing <session-path-or-id>");
     console.error(
-      "usage: alembic compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     return 1;
   }
   const formatArg = parseFlag(args, "--format") ?? "xml";
   if (formatArg !== "xml" && formatArg !== "markdown") {
-    console.error(`alembic compact: invalid --format: ${formatArg} (expected xml or markdown)`);
+    console.error(`ambix compact: invalid --format: ${formatArg} (expected xml or markdown)`);
     return 1;
   }
   const outputArg = parseFlag(args, "--output");
@@ -292,7 +290,7 @@ async function runCompact(args: string[]): Promise<number> {
   try {
     sessionPath = await resolveSessionPath(sessionArg);
   } catch (err) {
-    console.error(`alembic compact: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`ambix compact: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 
@@ -327,9 +325,9 @@ function parseFlag(args: string[], name: string): string | undefined {
 }
 
 function printUsage(): void {
-  console.error("alembic — Claude Code session distillation pipeline");
+  console.error("ambix — Claude Code session distillation pipeline");
   console.error("");
-  console.error("usage: alembic <subcommand> [args]");
+  console.error("usage: ambix <subcommand> [args]");
   console.error("");
   console.error("subcommands:");
   console.error(
@@ -352,7 +350,7 @@ function printUsage(): void {
   );
   console.error("  help                             show this message");
   console.error("");
-  console.error("Run 'alembic <subcommand> --help' for subcommand-specific flags.");
+  console.error("Run 'ambix <subcommand> --help' for subcommand-specific flags.");
   console.error("");
   console.error(
     "Note: stage, file-at, and query are primarily tools that the staged distiller agent"

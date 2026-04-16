@@ -1,5 +1,5 @@
 // src/analyze/index.ts
-import type { Session } from "parse-claude-logs";
+import type { Session } from "parse-cc";
 import { clusterBashCommands } from "./bash-clusters.js";
 import { collectFailures } from "./failures.js";
 import { buildFileChurnTimeline } from "./file-churn.js";

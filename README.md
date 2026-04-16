@@ -1,8 +1,8 @@
-# alembic
+# ambix
 
 **Session distillation pipeline for [Claude Code](https://claude.ai/code) session logs.**
 
-Alembic stages, analyzes, and distills Claude Code session JSONL logs into structured summary artifacts suitable for downstream review, search, and retrospective analysis.
+Ambix stages, analyzes, and distills Claude Code session JSONL logs into structured summary artifacts suitable for downstream review, search, and retrospective analysis.
 
 > **Status:** Experimental. API may change before v1.0.
 
@@ -12,10 +12,10 @@ Alembic stages, analyzes, and distills Claude Code session JSONL logs into struc
 
 ## Installation
 
-> **Note:** Alembic currently depends on `parse-claude-logs` as a sibling checkout. A published npm release is pending.
+> **Note:** Ambix currently depends on `parse-cc` as a sibling checkout. A published npm release is pending.
 
 ```bash
-npm install alembic
+npm install ambix
 ```
 
 ## CLI Quickstart
@@ -23,30 +23,30 @@ npm install alembic
 Distill a session into a structured artifact:
 
 ```bash
-alembic distill /path/to/session.jsonl
+ambix distill /path/to/session.jsonl
 ```
 
-This runs the full pipeline (stage → analyze → distill → merge) and writes an artifact to `~/.alembic/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
+This runs the full pipeline (stage → analyze → distill → merge) and writes an artifact to `~/.ambix/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
 
 Other subcommands:
 
-- `alembic analyze <session>` — deterministic analysis only (JSON to stdout)
-- `alembic stage <session>` — stage a session into a tmp workspace
-- `alembic file-at <path> <ix>` — print a tracked file's content at a given turn
-- `alembic query <session> <subcmd>` — search within a session log
+- `ambix analyze <session>` — deterministic analysis only (JSON to stdout)
+- `ambix stage <session>` — stage a session into a tmp workspace
+- `ambix file-at <path> <ix>` — print a tracked file's content at a given turn
+- `ambix query <session> <subcmd>` — search within a session log
 
-Run `alembic help` or `alembic <subcommand> --help` for full flag documentation.
+Run `ambix help` or `ambix <subcommand> --help` for full flag documentation.
 
 > The `stage`, `file-at`, and `query` subcommands are primarily intended as tools the staged distiller agent calls during a distill run. `distill` and `analyze` are the human-facing entry points.
 
 ## Concepts
 
-Alembic runs a four-stage pipeline over a Claude Code session log:
+Ambix runs a four-stage pipeline over a Claude Code session log:
 
 1. **Stage** — copies the session into a tmp workspace and produces a condensed JSONL view with rehydrated file histories and tool result snapshots.
 2. **Analyze** — deterministic pass that computes token totals, tool usage, file churn, bash clusters, failures, and permission events.
 3. **Distill** — an agent reads the staged workspace and produces a structured `Narrative` (main task, episodes, decisions, corrections, verifications, friction points, wins, unresolved items).
-4. **Merge + Persist** — combines metadata, deterministic analysis, and narrative into a final `Artifact` persisted to `~/.alembic`.
+4. **Merge + Persist** — combines metadata, deterministic analysis, and narrative into a final `Artifact` persisted to `~/.ambix`.
 
 See [`docs/concepts.md`](docs/concepts.md) for the full pipeline walkthrough and artifact schema.
 
@@ -55,7 +55,7 @@ See [`docs/concepts.md`](docs/concepts.md) for the full pipeline walkthrough and
 Full pipeline:
 
 ```typescript
-import { run, RealAgentRunner } from "alembic";
+import { run, RealAgentRunner } from "ambix";
 
 const result = await run({
   session: "/path/to/session.jsonl",
@@ -70,14 +70,14 @@ if (result.success) {
 Lower-level building blocks:
 
 ```typescript
-import { stage, analyze, fileAt } from "alembic";
-import { Session } from "parse-claude-logs";
+import { stage, analyze, fileAt } from "ambix";
+import { Session } from "parse-cc";
 
 const session = new Session("/path/to/session.jsonl");
-const layout = await stage(session, "/tmp/alembic-work");
+const layout = await stage(session, "/tmp/ambix-work");
 const results = await analyze(session);
 const file = await fileAt({
-  tmp: "/tmp/alembic-work",
+  tmp: "/tmp/ambix-work",
   path: "src/foo.ts",
   ix: 42,
 });

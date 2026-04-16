@@ -1,8 +1,8 @@
 // src/stage/copy-spills.ts
 import { access, copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { Session } from "parse-claude-logs";
-import { parsePersistedOutput } from "parse-claude-logs";
+import type { Session } from "parse-cc";
+import { parsePersistedOutput } from "parse-cc";
 
 /** Result of a spill-copy pass. */
 export interface CopySpillsResult {
@@ -23,7 +23,7 @@ export interface CopySpillsResult {
  * and the subagent's condensed log will carry refs to files that
  * don't exist.
  *
- * Uses parse-claude-logs' `Session.toolResults()` (which handles the
+ * Uses parse-cc' `Session.toolResults()` (which handles the
  * user-entry + tool_result extraction) and `Session.subagents()` for
  * traversal. Subagents cannot nest, so one level of recursion is
  * sufficient.

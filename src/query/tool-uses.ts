@@ -1,6 +1,6 @@
 // src/query/tool-uses.ts
-import type { Session } from "parse-claude-logs";
-import { isAssistantEntry, isToolUseBlock } from "parse-claude-logs";
+import type { Session } from "parse-cc";
+import { isAssistantEntry, isToolUseBlock } from "parse-cc";
 import type { QueryMatch } from "./types.js";
 
 /** Options for the tool-uses query. */

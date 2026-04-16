@@ -2,7 +2,7 @@ import type { AnalyzeResult } from "../analyze/index.js";
 // src/artifact/types.ts
 import type { MetadataJson } from "../types.js";
 
-/** Top-level final artifact written to ~/.alembic/sessions/<id>/artifact.json. */
+/** Top-level final artifact written to ~/.ambix/sessions/<id>/artifact.json. */
 export interface Artifact {
   schema_version: "1";
   session_id: string;

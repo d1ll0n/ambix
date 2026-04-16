@@ -1,4 +1,4 @@
-import type { ToolResultBlock } from "parse-claude-logs";
+import type { ToolResultBlock } from "parse-cc";
 import { describe, expect, it } from "vitest";
 import {
   condenseToolUse,
@@ -22,7 +22,7 @@ describe("fmtPath", () => {
     expect(fmtPath("/home/user/app/src/foo.ts")).toBe("app/src/foo.ts");
   });
   it("strips /tmp/<topdir>/", () => {
-    expect(fmtPath("/tmp/alembic-smoke/session.jsonl")).toBe("session.jsonl");
+    expect(fmtPath("/tmp/ambix-smoke/session.jsonl")).toBe("session.jsonl");
   });
   it("strips /Users/<topdir>/", () => {
     expect(fmtPath("/Users/dev/project/src/bar.ts")).toBe("project/src/bar.ts");

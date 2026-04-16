@@ -1,6 +1,6 @@
 // src/analyze/token-density.ts
-import type { LogEntry } from "parse-claude-logs";
-import { isAssistantEntry } from "parse-claude-logs";
+import type { LogEntry } from "parse-cc";
+import { isAssistantEntry } from "parse-cc";
 
 /**
  * Produce an ordered series of `[ix, total_tokens]` for each

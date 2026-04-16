@@ -1,5 +1,5 @@
 // src/stage/condense.ts
-import type { AssistantEntry, ContentBlock, LogEntry, UserEntry } from "parse-claude-logs";
+import type { AssistantEntry, ContentBlock, LogEntry, UserEntry } from "parse-cc";
 import {
   isAssistantEntry,
   isAttachmentEntry,
@@ -11,7 +11,7 @@ import {
   isToolUseBlock,
   isUserEntry,
   parsePersistedOutput,
-} from "parse-claude-logs";
+} from "parse-cc";
 import type { CondensedEntry, RehydrationStub } from "../types.js";
 
 /** Options controlling condensation. */

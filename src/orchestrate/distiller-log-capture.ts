@@ -9,7 +9,7 @@ export interface CaptureDistillerLogOptions {
   tmpDir: string;
   /** Source session id — used to build the destination path. */
   sessionId: string;
-  /** Output root (defaults to ~/.alembic). */
+  /** Output root (defaults to ~/.ambix). */
   outputRoot?: string;
   /** Override the Claude Code home (defaults to ~/.claude). Used by tests. */
   ccHome?: string;
@@ -100,7 +100,7 @@ export async function waitForStability(
 
 /**
  * Move the distiller agent's own session log out of the normal Claude Code
- * projects directory so it doesn't feed back into future `alembic distill`
+ * projects directory so it doesn't feed back into future `ambix distill`
  * runs (and so we have the full distiller transcript saved alongside the
  * artifact for debugging).
  *
@@ -120,7 +120,7 @@ export async function captureDistillerLog(
   opts: CaptureDistillerLogOptions
 ): Promise<CaptureDistillerLogResult> {
   const ccHome = opts.ccHome ?? path.join(homedir(), ".claude");
-  const outputRoot = opts.outputRoot ?? path.join(homedir(), ".alembic");
+  const outputRoot = opts.outputRoot ?? path.join(homedir(), ".ambix");
 
   const slug = opts.tmpDir.replace(/\//g, "-");
   const sourceProjectDir = path.join(ccHome, "projects", slug);

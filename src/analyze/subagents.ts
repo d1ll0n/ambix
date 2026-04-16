@@ -1,6 +1,6 @@
 // src/analyze/subagents.ts
-import type { LogEntry, Session } from "parse-claude-logs";
-import { isAssistantEntry, isToolUseBlock } from "parse-claude-logs";
+import type { LogEntry, Session } from "parse-cc";
+import { isAssistantEntry, isToolUseBlock } from "parse-cc";
 import type { SubagentRecord } from "./types.js";
 
 /**

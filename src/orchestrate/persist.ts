@@ -6,7 +6,7 @@ import type { Artifact } from "../artifact/types.js";
 
 /** Options for persistence. */
 export interface PersistOptions {
-  /** Root directory to write under. Default `~/.alembic`. */
+  /** Root directory to write under. Default `~/.ambix`. */
   outputRoot?: string;
 }
 
@@ -19,7 +19,7 @@ export async function persistArtifact(
   artifact: Artifact,
   opts: PersistOptions = {}
 ): Promise<string> {
-  const root = opts.outputRoot ?? path.join(homedir(), ".alembic");
+  const root = opts.outputRoot ?? path.join(homedir(), ".ambix");
   const destDir = path.join(root, "sessions", artifact.session_id);
   await mkdir(destDir, { recursive: true });
   const destPath = path.join(destDir, "artifact.json");

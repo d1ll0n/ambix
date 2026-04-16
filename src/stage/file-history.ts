@@ -1,8 +1,8 @@
 // src/stage/file-history.ts
 import { access, copyFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { LogEntry, Session } from "parse-claude-logs";
-import { isFileHistorySnapshotEntry } from "parse-claude-logs";
+import type { LogEntry, Session } from "parse-cc";
+import { isFileHistorySnapshotEntry } from "parse-cc";
 import type { SnapshotsIndex } from "../types.js";
 
 /**

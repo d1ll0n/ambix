@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to alembic are documented in this file.
+All notable changes to ambix are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project aims to loosely follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,7 +9,7 @@ Until a `1.0.0` release is cut, every change lands under `[Unreleased]`.
 ## [Unreleased]
 
 ### Added
-- **`alembic compact <session>` subcommand.** Produces a chronological,
+- **`ambix compact <session>` subcommand.** Produces a chronological,
   per-round summary of a session intended as a drop-in replacement for
   Claude Code's built-in `/compact` output when starting a new session
   from a previous one. Each round contains the human prompt, assistant
@@ -21,16 +21,16 @@ Until a `1.0.0` release is cut, every change lands under `[Unreleased]`.
   index: `<user idx="N">`, `<assistant idx="N">`, `<tools idx="A-B">`
   with per-line `[ix]` prefixes — so a new session can load the compact
   output and fetch full details for any specific turn via
-  `alembic query <session> <ix>`. XML is the default format (best for
+  `ambix query <session> <ix>`. XML is the default format (best for
   model consumption); `--format markdown` is available for human
   browsing. `--output <file>` writes to a file instead of stdout.
-- **`alembic query` accepts session IDs.** The query subcommand now
+- **`ambix query` accepts session IDs.** The query subcommand now
   routes through the global `resolveSessionPath`, so bare UUIDs and
   UUID prefixes work the same way they do for stage / analyze /
   distill / compact. Existing `metadata.json`-based `query_targets`
   resolution (staged-workspace mode used by the distiller agent)
   still takes priority.
-- **`alembic query <session> <N>` bare-integer shortcut.** A numeric
+- **`ambix query <session> <N>` bare-integer shortcut.** A numeric
   second argument is rewritten internally to `show <N>`. Keeps
   subsequent flags like `--field message.content[0].input.content`
   working, and makes the CLI call implied by `compact` output as
@@ -48,8 +48,8 @@ Until a `1.0.0` release is cut, every change lands under `[Unreleased]`.
   `<command-name>/clear</command-name>`, `<system-reminder>`-only) are
   filtered out; `rawRounds` vs `rounds` in `CompactStats` exposes both
   counts for diagnostics.
-- **Session ID resolution.** `alembic stage`, `alembic analyze`, and
-  `alembic distill` now accept a session UUID or unambiguous UUID prefix
+- **Session ID resolution.** `ambix stage`, `ambix analyze`, and
+  `ambix distill` now accept a session UUID or unambiguous UUID prefix
   in addition to a `.jsonl` path. Resolution runs through
   `findAllSessions` across `~/.claude/projects`; ambiguous prefixes
   error with the list of matching sessions.
@@ -63,10 +63,10 @@ Until a `1.0.0` release is cut, every change lands under `[Unreleased]`.
   loop and anti-patterns (no iterating turns via `bin/query show 0`,
   `show 1`, ...). `bin/query` framing rewritten to position it strictly
   as a filter/extract helper.
-- **`--max-inline-bytes <N>`** flag on both `alembic stage` and
-  `alembic distill` to override the inline size budget for tool_results,
+- **`--max-inline-bytes <N>`** flag on both `ambix stage` and
+  `ambix distill` to override the inline size budget for tool_results,
   text blocks, and per-field tool_use inputs (default 2048).
-- **`-v` / `--verbose`** flag on both `alembic stage` and `alembic distill`.
+- **`-v` / `--verbose`** flag on both `ambix stage` and `ambix distill`.
   Prints a per-kind condensation report to stderr showing, for each
   content bucket (`tool_use:<name>`, `tool_result:<name>`,
   `assistant:text`, `assistant:thinking`, `user:text`, `other:<type>`),

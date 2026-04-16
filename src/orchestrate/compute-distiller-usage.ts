@@ -1,7 +1,7 @@
 // src/orchestrate/compute-distiller-usage.ts
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { aggregateTokens } from "../analyze/tokens.js";
 
 /** Authoritative distiller token totals. All fields default to 0. */
@@ -14,7 +14,7 @@ export interface DistillerUsageTotals {
 
 /**
  * Walk every `.jsonl` file at the top level of `distillerLogDir`,
- * parse each via `parse-claude-logs`' `Session` class, and sum the
+ * parse each via `parse-cc`' `Session` class, and sum the
  * aggregated token usage across them.
  *
  * Returns `null` when the directory doesn't exist or has no `.jsonl`

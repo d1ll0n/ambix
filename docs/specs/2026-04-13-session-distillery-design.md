@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-13
 **Status:** Design accepted, implementation pending
-**Related repos:** `alembic` (this repo), `parse-claude-logs` (sibling, pure library dependency)
+**Related repos:** `ambix` (this repo), `parse-cc` (sibling, pure library dependency)
 
 ---
 
@@ -31,11 +31,11 @@ A secondary goal: the same artifacts support day-journal rollups across sessions
 
 ## Architecture: strict library / orchestrator split
 
-The system spans two repositories, with a strict boundary: all new code lives in `alembic`. `parse-claude-logs` is used unchanged as a pure library dependency.
+The system spans two repositories, with a strict boundary: all new code lives in `ambix`. `parse-cc` is used unchanged as a pure library dependency.
 
-### `parse-claude-logs` (sibling repo, open-source library)
+### `parse-cc` (sibling repo, open-source library)
 
-Used as a pure library dependency — **gains no new code** for this project. alembic imports:
+Used as a pure library dependency — **gains no new code** for this project. ambix imports:
 
 - `Session` class (entry parsing, scalar metadata, lazy caches)
 - `src/derive/*` modules for direct session facts (metrics, compaction, tool-calls, first-message, ongoing, skills, deferred-tools)
@@ -45,22 +45,22 @@ Used as a pure library dependency — **gains no new code** for this project. al
 - `src/file-history.ts` (file-history blob joining)
 - Typed entries: `LogEntry`, `ContentBlock`, `AttachmentPayload`, `ToolUseResultData`
 
-Rationale: parse-claude-logs is a general-purpose library for parsing, exploring, and searching Claude Code session logs. Analysis-for-distillation is a specific workflow built on top of that library, not part of its core responsibility. Binding parse-claude-logs' API to alembic's specific needs would constrain its evolution and conflate layers. Keeping the boundary strict preserves both repos' focus: parse-claude-logs stays minimal and reusable; alembic is free to evolve its agent harness, storage strategy, and DB migration without churn in the public library.
+Rationale: parse-cc is a general-purpose library for parsing, exploring, and searching Claude Code session logs. Analysis-for-distillation is a specific workflow built on top of that library, not part of its core responsibility. Binding parse-cc' API to ambix's specific needs would constrain its evolution and conflate layers. Keeping the boundary strict preserves both repos' focus: parse-cc stays minimal and reusable; ambix is free to evolve its agent harness, storage strategy, and DB migration without churn in the public library.
 
-If a primitive currently in alembic ever turns out to be reusable outside distillation (e.g. someone wants bash pattern clustering for a different tool), we can extract it into parse-claude-logs then. Reversing a premature extraction is cheap, reversing a premature coupling is expensive.
+If a primitive currently in ambix ever turns out to be reusable outside distillation (e.g. someone wants bash pattern clustering for a different tool), we can extract it into parse-cc then. Reversing a premature extraction is cheap, reversing a premature coupling is expensive.
 
-### `alembic` (this repo, private)
+### `ambix` (this repo, private)
 
 Owns the full pipeline end-to-end:
 
-- Depends on `parse-claude-logs` as a library (via `file:../parse-claude-logs`).
+- Depends on `parse-cc` as a library (via `file:../parse-cc`).
 - **Deterministic analysis passes** (`src/analyze/`) — tool-use aggregates, per-file churn timelines, bash pattern clustering, failure surface collection, token density timelines, subagent cross-reference, spill file inventory, permission event timeline.
 - **Tmp-dir staging** (`src/stage/`) — constructs the self-contained working directory for the distiller agent: copies session + subagents + spill files + file-history blobs into the layout defined below.
 - **Condensed JSONL rendering** (`src/stage/condense.ts`) — produces the agent-facing log with inline rehydration stubs.
-- **`alembic file-at <path> <ix>` CLI** — resolves a tracked file's state at a specific turn using `parse-claude-logs`' `file-history` library exports.
+- **`ambix file-at <path> <ix>` CLI** — resolves a tracked file's state at a specific turn using `parse-cc`' `file-history` library exports.
 - **Distiller agent orchestration** (`src/agent/`) — spawns the agent, manages validation retries, handles agent spawn mechanism.
 - **Validation** (`src/agent/lint.ts`) — the `lint-output` script, shared between agent-side (copied into tmp env) and orchestrator-side (final gate).
-- **Artifact merging and persistence** (`src/orchestrate/`) — combines metadata + deterministic + narrative into the final artifact, writes to `~/.alembic/sessions/<id>/artifact.json`.
+- **Artifact merging and persistence** (`src/orchestrate/`) — combines metadata + deterministic + narrative into the final artifact, writes to `~/.ambix/sessions/<id>/artifact.json`.
 - **Tmp lifecycle management** — retained during testing, discarded on success, retained on failure for debugging.
 
 ---
@@ -144,7 +144,7 @@ Key properties:
 
 - **`ix`** is the session-local numeric index. Every reference in the final artifact and every file under `turns/` uses `ix`, not UUIDs. A post-processing pass can resolve these to UUIDs via the `ref` field if needed.
 - **`content` mirrors the source entry shape**, so tool_use / tool_result / thinking / attachment blocks appear in their natural form. No translation layer that could lose information.
-- **Duplicate streaming entries are removed** via `deduplicateByRequestId` (existing in parse-claude-logs).
+- **Duplicate streaming entries are removed** via `deduplicateByRequestId` (existing in parse-cc).
 - **`<synthetic>` model entries are preserved** in the condensed log (the agent should see them), but are flagged via a top-level `synthetic: true` field so the agent can easily distinguish harness-generated turns.
 
 ### Truncation and rehydration stubs
@@ -207,9 +207,9 @@ Previews are deterministic: first N characters of the text content, or for struc
 
 ## Deterministic layer
 
-### Sourced from `parse-claude-logs`
+### Sourced from `parse-cc`
 
-alembic imports these library exports and composes them into its analysis output — it does not reimplement them:
+ambix imports these library exports and composes them into its analysis output — it does not reimplement them:
 
 - Session metadata (`first-observed.ts`)
 - Token metrics per model, message counts (`metrics.ts`)
@@ -222,7 +222,7 @@ alembic imports these library exports and composes them into its analysis output
 - Spill file parsing (`persisted-output.ts`)
 - File-history blob joining (`file-history.ts`)
 
-### New passes (in `alembic/src/analyze/`)
+### New passes (in `ambix/src/analyze/`)
 
 1. **Tool-use aggregates** — invocations per tool, per-file Edit/Write/Read counts, unique files touched, **read-without-write files** (files the agent read one or more times but never modified — a candidate signal for "rediscovery").
 2. **Bash pattern clustering** — normalize Bash commands by first token + flag shape, cluster repeated invocations. Surfaces "this complex one-liner was used 8 times; candidate for a script."
@@ -263,7 +263,7 @@ The agent discovers all of these by reading the condensed log. Only structural m
   - `metadata.json` — small, read first
   - `session.jsonl` — primary source, read linearly
   - `turns/`, `spill/`, `subagents/`, `file-history/` — on-demand rehydration via native `Read` tool
-  - `alembic file-at <path> <ix>` — the one CLI for reading a tracked file's state at a specific turn
+  - `ambix file-at <path> <ix>` — the one CLI for reading a tracked file's state at a specific turn
 - **Rehydration guidance**: when a truncation stub's `tokens_est` is comparable to or smaller than what the agent expects to gain from reading it, rehydrate. When it's dramatically larger and the surrounding context doesn't suggest importance, skip.
 - **Schema reminder**: inline summary of the narrative schema, with a note that `out/narrative.json` must pass `lint-output` before the agent stops.
 - **Verification requirement**: agent must run `lint-output` before declaring done.
@@ -272,7 +272,7 @@ The agent discovers all of these by reading the condensed log. Only structural m
 
 The agent uses native Claude Code tools (`Read`, `Glob`, `Grep`, `Bash`) for everything. No custom CLI to learn, aside from the single `file-at` primitive. The filesystem layout IS the interface.
 
-### One CLI tool: `alembic file-at <path> <ix>`
+### One CLI tool: `ambix file-at <path> <ix>`
 
 The only case where filesystem-as-interface breaks down is "what did file X look like at turn Y." Pre-materializing per-turn file snapshots would duplicate large amounts of data; a small CLI tool resolves on demand instead.
 
@@ -281,7 +281,7 @@ The only case where filesystem-as-interface breaks down is "what did file X look
 - Finds the blob that was current for `path` at turn `ix`
 - Prints raw content to stdout, exits non-zero if not found
 
-Lives in `alembic`. Uses `parse-claude-logs`' file-history library exports internally.
+Lives in `ambix`. Uses `parse-cc`' file-history library exports internally.
 
 ---
 
@@ -432,17 +432,17 @@ Single JSON file per session. Flat structure, stable shape, cheap to ingest into
 ### Entrypoint
 
 ```
-alembic distill <session-id> [--output <path>] [--keep-tmp] [--tmp-root <path>]
+ambix distill <session-id> [--output <path>] [--keep-tmp] [--tmp-root <path>]
 ```
 
-- `<session-id>` can be a UUID (resolved via `parse-claude-logs` discovery), an absolute path to a `.jsonl`, or a path relative to `cwd`.
-- `--output` defaults to `~/.alembic/sessions/<session-id>/artifact.json`.
+- `<session-id>` can be a UUID (resolved via `parse-cc` discovery), an absolute path to a `.jsonl`, or a path relative to `cwd`.
+- `--output` defaults to `~/.ambix/sessions/<session-id>/artifact.json`.
 - `--keep-tmp` retains the staging directory after success. Default is to clean up on success, retain on failure.
-- `--tmp-root` overrides the staging root (default `$TMPDIR/alembic/<session-id>-<rand>`).
+- `--tmp-root` overrides the staging root (default `$TMPDIR/ambix/<session-id>-<rand>`).
 
 ### Lifecycle
 
-1. **Resolve session** — locate the real `.jsonl` via parse-claude-logs discovery.
+1. **Resolve session** — locate the real `.jsonl` via parse-cc discovery.
 2. **Stage** — build the tmp directory from the resolved session. Copy spill files, subagent files, file-history blobs. Produce `metadata.json` and `session.jsonl`. Write per-turn full-detail files under `turns/`. Copy `lint-output` script into `bin/`.
 3. **Analyze** — run deterministic passes, hold results in memory (not yet written).
 4. **Distill** — spawn agent with tmp dir as cwd and system prompt briefing it on inputs and schema. Agent writes `out/narrative.json`.
@@ -466,7 +466,7 @@ TBD during implementation. Rough heuristic: sonnet for most sessions, opus for s
 ## Durable output layout
 
 ```
-~/.alembic/
+~/.ambix/
   sessions/
     <session-id>/
       artifact.json          # the final merged artifact
@@ -496,9 +496,9 @@ Flat `sessions/<id>/` structure supports day-journal rollups via `glob` and supp
 3. **Cross-session deduplication of friction points** — if the same friction appears across many sessions, it's a stronger signal. Handled at review-pass time, not distillation time.
 4. **Preview generation tuning** — first N chars is a reasonable default but we may want smarter previews for specific tool types (e.g. first line + last line of a big diff).
 5. **Attribution field quality** — the `friction_points[].attribution` is free-form, which risks inconsistency. Acceptable for v1; the review pass can cluster.
-6. **Agent spawn mechanism selection** — picking between Agent SDK / Claude Code subagent dispatch / managed agent. Decided during alembic implementation.
+6. **Agent spawn mechanism selection** — picking between Agent SDK / Claude Code subagent dispatch / managed agent. Decided during ambix implementation.
 7. **Model selection strategy** — per-session model choice based on complexity signals. Deferred to an optimization pass.
-8. **Possible future extraction** — if a primitive currently in alembic (bash pattern clustering, file churn timeline, etc.) turns out to be reusable outside distillation, extract it into `parse-claude-logs` then. Don't pre-extract.
+8. **Possible future extraction** — if a primitive currently in ambix (bash pattern clustering, file churn timeline, etc.) turns out to be reusable outside distillation, extract it into `parse-cc` then. Don't pre-extract.
 
 ---
 
@@ -506,10 +506,10 @@ Flat `sessions/<id>/` structure supports day-journal rollups via `glob` and supp
 
 | Decision | Choice |
 |---|---|
-| Architectural scope | Strict split: parse-claude-logs unchanged pure library dep; all new code in alembic |
+| Architectural scope | Strict split: parse-cc unchanged pure library dep; all new code in ambix |
 | Agent-facing log format | JSONL with inline rehydration stubs |
 | Rehydration mechanism | Filesystem-as-interface (relative paths, native Read tool) |
-| Special CLI | One tool: `alembic file-at <path> <ix>` |
+| Special CLI | One tool: `ambix file-at <path> <ix>` |
 | Episode detection | Agent's job (no deterministic hints to avoid biasing) |
 | Correction/mistake detection | Agent's job |
 | Deterministic audience split | Agent briefing = metadata only; final artifact = full deterministic view |
@@ -518,4 +518,4 @@ Flat `sessions/<id>/` structure supports day-journal rollups via `glob` and supp
 | Review-hint taxonomy | None — free-form `attribution` field on friction points |
 | Validation | `lint-output` script run by agent AND orchestrator |
 | Tmp lifecycle | Cleaned on success, retained on failure, `--keep-tmp` flag available |
-| Output location | `~/.alembic/sessions/<session-id>/artifact.json`, flat |
+| Output location | `~/.ambix/sessions/<session-id>/artifact.json`, flat |

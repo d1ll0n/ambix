@@ -1,7 +1,7 @@
 // src/orchestrate/resolve.ts
 import { access } from "node:fs/promises";
 import path from "node:path";
-import { findAllSessions } from "parse-claude-logs";
+import { findAllSessions } from "parse-cc";
 
 /**
  * Resolve a session argument to an absolute `.jsonl` file path.

@@ -8,7 +8,7 @@ runQuery(process.argv.slice(2)).then(
     process.exit(code);
   },
   (err) => {
-    process.stderr.write(`alembic query: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.stderr.write(`ambix query: ${err instanceof Error ? err.message : String(err)}\n`);
     process.exit(2);
   }
 );

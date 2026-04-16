@@ -1,4 +1,4 @@
-import { Session, parsePersistedOutput } from "parse-claude-logs";
+import { Session, parsePersistedOutput } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { condenseEntries } from "../../src/stage/condense.js";
 import {
@@ -171,7 +171,7 @@ describe("condenseEntries — truncation", () => {
   it("replaces persisted-output tool_results with a spill stub", async () => {
     const persisted =
       "<persisted-output>\nOutput too large (51.3KB). Full output saved to: /abs/path/tool-results/toolu_X.json\n\nPreview (first 2KB):\nfirst few lines of the spill\n";
-    // sanity: parse-claude-logs detects this format
+    // sanity: parse-cc detects this format
     expect(parsePersistedOutput(persisted)).not.toBe(null);
 
     const text = joinLines(

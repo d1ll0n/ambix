@@ -1,6 +1,6 @@
 // src/compact/rounds.ts
 //
-// Round-level analysis for `alembic compact`:
+// Round-level analysis for `ambix compact`:
 //
 //   • extractUserText   — returns the text of a *human* user message
 //                         (rejects tool_result-wrapper user entries)
@@ -12,14 +12,14 @@
 //                         yielding text blocks and tool_use one-liners
 //                         with their source entry's ix
 
-import type { AssistantEntry, LogEntry, ToolResultBlock } from "parse-claude-logs";
+import type { AssistantEntry, LogEntry, ToolResultBlock } from "parse-cc";
 import {
   isAssistantEntry,
   isTextBlock,
   isToolResultBlock,
   isToolUseBlock,
   isUserEntry,
-} from "parse-claude-logs";
+} from "parse-cc";
 import { condenseToolUse } from "./condensers.js";
 
 /** Indexed log entry — `ix` is its position in the deduped entry list. */

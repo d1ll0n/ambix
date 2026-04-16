@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // scripts/opsec-scan.mjs
 //
-// Pre-publish / pre-push secret and PII scanner for alembic.
+// Pre-publish / pre-push secret and PII scanner for ambix.
 //
 // Walks ALL committed history (every unique blob + commit metadata)
 // AND staged-but-not-yet-committed files, checking for patterns that

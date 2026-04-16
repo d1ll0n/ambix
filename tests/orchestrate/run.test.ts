@@ -31,7 +31,7 @@ describe("run end-to-end with mock runner", () => {
       )
     );
 
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
     const tmpRoot = path.join(dir, "tmp-root");
 
     const result = await run({
@@ -61,7 +61,7 @@ describe("run end-to-end with mock runner", () => {
     writeFileSync(sessionPath, joinLines(userLine({ text: "x", uuid: "u1" })));
 
     const tmpRoot = path.join(dir, "tmp-root");
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
 
     const result = await run({
       session: sessionPath,
@@ -79,7 +79,7 @@ describe("run end-to-end with mock runner", () => {
     writeFileSync(sessionPath, joinLines(userLine({ text: "x", uuid: "u1" })));
 
     const tmpRoot = path.join(dir, "tmp-root");
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
 
     const result = await run({
       session: sessionPath,
@@ -98,7 +98,7 @@ describe("run end-to-end with mock runner", () => {
     writeFileSync(sessionPath, joinLines(userLine({ text: "x", uuid: "u1" })));
 
     const tmpRoot = path.join(dir, "tmp-root");
-    const outputRoot = path.join(dir, "alembic-home");
+    const outputRoot = path.join(dir, "ambix-home");
 
     const brokenRunner = {
       async run() {

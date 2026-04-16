@@ -1,7 +1,7 @@
 // src/stage/copy-subagents.ts
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Session } from "parse-claude-logs";
+import type { Session } from "parse-cc";
 import { condenseEntries } from "./condense.js";
 import { writeFullTurns } from "./turns.js";
 

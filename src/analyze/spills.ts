@@ -1,6 +1,6 @@
 // src/analyze/spills.ts
-import type { LogEntry } from "parse-claude-logs";
-import { isToolResultBlock, isUserEntry, parsePersistedOutput } from "parse-claude-logs";
+import type { LogEntry } from "parse-cc";
+import { isToolResultBlock, isUserEntry, parsePersistedOutput } from "parse-cc";
 import type { SpillRecord } from "./types.js";
 
 /**

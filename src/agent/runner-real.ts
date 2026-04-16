@@ -269,14 +269,14 @@ function aggregateResultTokens(r: {
  *    `bypassPermissions` rejects root to avoid accidentally running
  *    destructive commands unsupervised, so we use the next-most-open
  *    mode instead.
- *  - Otherwise default to `bypassPermissions` since alembic is invoked
+ *  - Otherwise default to `bypassPermissions` since ambix is invoked
  *    in a controlled, isolated tmp workspace.
  */
 export function resolvePermissionMode(explicit: string | undefined, isRoot: boolean): string {
   if (explicit !== undefined) return explicit;
   if (isRoot) {
     console.warn(
-      "alembic: running as root, defaulting permissionMode=acceptEdits " +
+      "ambix: running as root, defaulting permissionMode=acceptEdits " +
         "(bypassPermissions refuses to run under root)"
     );
     return "acceptEdits";

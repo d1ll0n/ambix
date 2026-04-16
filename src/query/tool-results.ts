@@ -1,6 +1,6 @@
 // src/query/tool-results.ts
-import type { ContentBlock, Session } from "parse-claude-logs";
-import { isToolResultBlock, isUserEntry } from "parse-claude-logs";
+import type { ContentBlock, Session } from "parse-cc";
+import { isToolResultBlock, isUserEntry } from "parse-cc";
 import type { QueryMatch } from "./types.js";
 
 /** Options for the tool-results query. */

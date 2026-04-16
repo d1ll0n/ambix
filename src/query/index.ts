@@ -1,7 +1,7 @@
 // src/query/index.ts
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { resolveSessionPath as resolveGlobalSessionPath } from "../orchestrate/resolve.js";
 import { formatMatches } from "./format.js";
 import { queryShow } from "./show.js";
@@ -43,7 +43,7 @@ export async function runQuery(args: string[]): Promise<{ code: number; output: 
     return { code: sessionPathArg ? 0 : 1, output: helpText() };
   }
 
-  // Shorthand: `alembic query <session> 42` is rewritten to `show 42`.
+  // Shorthand: `ambix query <session> 42` is rewritten to `show 42`.
   // Useful when the compaction XML emits `idx="N"` attributes — lets the
   // consuming agent rehydrate a specific entry with a bare-integer arg.
   if (/^\d+$/.test(subcommand)) {
@@ -113,7 +113,7 @@ function parseFormat(args: string[]): QueryOutputFormat {
 }
 
 function helpText(): string {
-  return `usage: alembic query <session.jsonl> <subcommand> [options]
+  return `usage: ambix query <session.jsonl> <subcommand> [options]
 
 Search a Claude Code session log without reading the whole file.
 
@@ -149,15 +149,15 @@ Format flags (any subcommand):
 ## Examples
 
   # find every Write call in a subagent log
-  alembic query subagents/agent-abc/session.jsonl tool-uses --name Write
+  ambix query subagents/agent-abc/session.jsonl tool-uses --name Write
 
   # show the full content a Write wrote
-  alembic query subagents/agent-abc/session.jsonl show 12 --field message.content[0].input.content
+  ambix query subagents/agent-abc/session.jsonl show 12 --field message.content[0].input.content
 
   # find errored tool_results in the parent session
-  alembic query session.jsonl tool-results --error
+  ambix query session.jsonl tool-results --error
 
   # substring search for "permission" in assistant text
-  alembic query session.jsonl text-search permission --role assistant
+  ambix query session.jsonl text-search permission --role assistant
 `;
 }

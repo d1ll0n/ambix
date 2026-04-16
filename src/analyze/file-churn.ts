@@ -1,6 +1,6 @@
 // src/analyze/file-churn.ts
-import type { LogEntry } from "parse-claude-logs";
-import { isAssistantEntry, isToolUseBlock } from "parse-claude-logs";
+import type { LogEntry } from "parse-cc";
+import { isAssistantEntry, isToolUseBlock } from "parse-cc";
 import type { ChurnRecord } from "./types.js";
 
 /**

@@ -13,7 +13,7 @@ export function writeFixture(parentDir: string, name: string, text: string): str
   return filePath;
 }
 
-export function makeTempDir(prefix = "alembic-test-"): string {
+export function makeTempDir(prefix = "ambix-test-"): string {
   return mkdtempSync(path.join(tmpdir(), prefix));
 }
 
@@ -29,7 +29,7 @@ function nextId(): string {
 
 // Request IDs advance independently of uuids so tests that pass explicit
 // uuids still get unique requestIds. Sharing a requestId across two
-// distinct assistant turns triggers parse-claude-logs' streaming dedupe
+// distinct assistant turns triggers parse-cc' streaming dedupe
 // (which collapses partial-message rolls into their final form) and
 // silently drops entries — a footgun when constructing multi-turn
 // fixtures by hand.

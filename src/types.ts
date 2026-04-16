@@ -1,7 +1,7 @@
 // src/types.ts
 
 /**
- * A single entry in the condensed session.jsonl produced by alembic's
+ * A single entry in the condensed session.jsonl produced by ambix's
  * staging step. Mirrors the source LogEntry shape as much as possible,
  * with these additions:
  *   - `ix`: session-local numeric index (used as the canonical reference
@@ -56,7 +56,7 @@ export interface MetadataJson {
    * Claude Code log files. Used by `bin/query` to resolve local paths
    * the agent passes (e.g. "session.jsonl" or
    * "subagents/agent-<uuid>/session.jsonl") back to the raw files that
-   * parse-claude-logs' Session class can parse. The agent never sees
+   * parse-cc' Session class can parse. The agent never sees
    * the raw paths directly — they stay out of the filesystem view.
    */
   query_targets: Record<string, string>;

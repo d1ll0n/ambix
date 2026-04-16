@@ -1,4 +1,4 @@
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildFileChurnTimeline } from "../../src/analyze/file-churn.js";
 import {

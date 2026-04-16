@@ -6,7 +6,7 @@
 // context-recovery input); the markdown variant is for humans reading
 // in a terminal or editor.
 
-import type { ToolResultBlock } from "parse-claude-logs";
+import type { ToolResultBlock } from "parse-cc";
 import { type Round, iterRoundStream, roundBranch } from "./rounds.js";
 
 export type CompactFormat = "xml" | "markdown";

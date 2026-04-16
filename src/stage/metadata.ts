@@ -1,6 +1,6 @@
 // src/stage/metadata.ts
 import path from "node:path";
-import type { Session } from "parse-claude-logs";
+import type { Session } from "parse-cc";
 import type { MetadataJson } from "../types.js";
 
 /**

@@ -1,4 +1,4 @@
-import { Session } from "parse-claude-logs";
+import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { condenseEntriesWithStats } from "../../src/stage/condense.js";
 import { formatCondenseStats } from "../../src/stage/format-stats.js";

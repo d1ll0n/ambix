@@ -8,7 +8,7 @@
   "files": {
     "ignoreUnknown": false,
     "include": ["src/**/*.ts", "tests/**/*.ts"],
-    "ignore": ["dist/**", "coverage/**", "node_modules/**", ".alembic/**"]
+    "ignore": ["dist/**", "coverage/**", "node_modules/**", ".ambix/**"]
   },
   "formatter": {
     "enabled": true,
