@@ -78,7 +78,10 @@ const WRAPPER_TAG_RE =
  * command-name, system-reminder, ...) with no actual human content.
  */
 export function isWrapperOnly(text: string): boolean {
-  const stripped = text.replace(WRAPPER_TAG_RE, "").replace(/<\/?[a-zA-Z-]+>/g, "").trim();
+  const stripped = text
+    .replace(WRAPPER_TAG_RE, "")
+    .replace(/<\/?[a-zA-Z-]+>/g, "")
+    .trim();
   return stripped.length === 0;
 }
 

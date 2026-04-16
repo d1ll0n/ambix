@@ -24,17 +24,16 @@ export function shorten(s: string, n = 80): string {
   return `${flat.slice(0, n - 1)}…`;
 }
 
+// Strip the first two directory components from paths that start with
+// common absolute prefixes (home dirs, tmp, etc.) so the output stays
+// readable. Leaves uncommon roots like /var/log/... untouched.
+const ABS_PREFIX_RE = /^\/(root|home|tmp|Users|users)\/[^/]+\/(.+)$/;
+
 /** Strip common long absolute prefixes so paths are readable. */
 export function fmtPath(p: string | undefined | null): string {
   if (!p) return "<no path>";
-  for (const prefix of ["/home/user/", "/tmp/", "/home/"]) {
-    if (p.startsWith(prefix)) {
-      // Drop the top-level directory under /root, /tmp, /home so
-      // "/home/user/project/app/foo.ts" → "wildcat/app/foo.ts".
-      const parts = p.split("/");
-      if (parts.length >= 4) return parts.slice(3).join("/");
-    }
-  }
+  const m = ABS_PREFIX_RE.exec(p);
+  if (m) return m[2];
   return p;
 }
 

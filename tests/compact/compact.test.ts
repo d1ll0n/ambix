@@ -28,7 +28,7 @@ describe("compactSession — end to end", () => {
         uuid: "a1",
         parentUuid: "u1",
         name: "Read",
-        input: { file_path: "/home/user/project/p/src/config.ts" },
+        input: { file_path: "/users/proj/p/src/config.ts" },
         toolUseId: "toolu_read",
       }),
       toolResultUserLine({
@@ -66,7 +66,7 @@ describe("compactSession — end to end", () => {
         uuid: "a1",
         parentUuid: "u1",
         name: "Read",
-        input: { file_path: "/home/user/project/p/a.ts" },
+        input: { file_path: "/users/proj/p/a.ts" },
         toolUseId: "t1",
       }),
       toolResultUserLine({ uuid: "u2", parentUuid: "a1", toolUseId: "t1", content: "abc" }),
@@ -74,7 +74,7 @@ describe("compactSession — end to end", () => {
         uuid: "a2",
         parentUuid: "u2",
         name: "Read",
-        input: { file_path: "/home/user/project/p/b.ts" },
+        input: { file_path: "/users/proj/p/b.ts" },
         toolUseId: "t2",
       }),
       toolResultUserLine({ uuid: "u3", parentUuid: "a2", toolUseId: "t2", content: "def" }),
@@ -96,7 +96,7 @@ describe("compactSession — end to end", () => {
     expect(toolBlock).toMatch(/- \[\d+\] Read p\/b\.ts/);
   });
 
-  it("emits <git branch=\"...\"/> marker only when the branch changes", async () => {
+  it('emits <git branch="..."/> marker only when the branch changes', async () => {
     const text = joinLines(
       userLine({ text: "first prompt", uuid: "u1", gitBranch: "main" }),
       assistantLine({

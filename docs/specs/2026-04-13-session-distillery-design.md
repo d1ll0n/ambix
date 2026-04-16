@@ -316,7 +316,7 @@ Single JSON file per session. Flat structure, stable shape, cheap to ingest into
 
   "metadata": {
     "version": "2.1.97",
-    "cwd": "/home/user/...",
+    "cwd": "/home/user/project/...",
     "git_branch": "master",
     "permission_mode": "...",
     "start_ts": "...",

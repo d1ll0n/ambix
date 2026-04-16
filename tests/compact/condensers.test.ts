@@ -18,11 +18,17 @@ function result(content: unknown, isError = false): ToolResultBlock {
 }
 
 describe("fmtPath", () => {
-  it("strips /home/user/<topdir>/", () => {
-    expect(fmtPath("/home/user/project/app/src/foo.ts")).toBe("app/src/foo.ts");
+  it("strips home-dir-style prefixes", () => {
+    expect(fmtPath("/home/user/app/src/foo.ts")).toBe("app/src/foo.ts");
   });
   it("strips /tmp/<topdir>/", () => {
     expect(fmtPath("/tmp/alembic-smoke/session.jsonl")).toBe("session.jsonl");
+  });
+  it("strips /Users/<topdir>/", () => {
+    expect(fmtPath("/Users/dev/project/src/bar.ts")).toBe("project/src/bar.ts");
+  });
+  it("strips /users/<topdir>/", () => {
+    expect(fmtPath("/users/proj/p/src/foo.ts")).toBe("p/src/foo.ts");
   });
   it("leaves other paths untouched", () => {
     expect(fmtPath("/var/log/foo.log")).toBe("/var/log/foo.log");
@@ -61,8 +67,7 @@ describe("diffStat", () => {
 
 describe("extractCommit", () => {
   it("pulls hash + subject from a git commit success line", () => {
-    const blob =
-      "[main 57bc123abc] feat: add thing\n 3 files changed, 12 insertions(+)";
+    const blob = "[main 57bc123abc] feat: add thing\n 3 files changed, 12 insertions(+)";
     expect(extractCommit(result(blob))).toEqual({
       shortHash: "57bc123",
       subject: "feat: add thing",
@@ -84,11 +89,7 @@ describe("extractCommit", () => {
 describe("condenseToolUse — Read", () => {
   it("reports lines + token estimate from cat -n output", () => {
     const catN = "     1\thello\n     2\tworld\n     3\t!";
-    const line = condenseToolUse(
-      "Read",
-      { file_path: "/home/user/project/p/src/foo.ts" },
-      result(catN)
-    );
+    const line = condenseToolUse("Read", { file_path: "/users/proj/p/src/foo.ts" }, result(catN));
     expect(line).toContain("Read p/src/foo.ts");
     expect(line).toMatch(/3 lines/);
     expect(line).toMatch(/~\d+ tokens/);
@@ -96,7 +97,7 @@ describe("condenseToolUse — Read", () => {
   it("reports offset/limit when set", () => {
     const line = condenseToolUse(
       "Read",
-      { file_path: "/home/user/project/p/a.ts", offset: 100, limit: 50 },
+      { file_path: "/users/proj/p/a.ts", offset: 100, limit: 50 },
       result("     1\tx")
     );
     expect(line).toContain("offset=100");
@@ -105,7 +106,7 @@ describe("condenseToolUse — Read", () => {
   it("surfaces errors", () => {
     const line = condenseToolUse(
       "Read",
-      { file_path: "/home/user/project/p/a.ts" },
+      { file_path: "/users/proj/p/a.ts" },
       result("ENOENT: no such file", true)
     );
     expect(line).toMatch(/\[error: ENOENT/);
@@ -117,7 +118,7 @@ describe("condenseToolUse — Edit", () => {
     const line = condenseToolUse(
       "Edit",
       {
-        file_path: "/home/user/project/p/src/foo.ts",
+        file_path: "/users/proj/p/src/foo.ts",
         old_string: "line1\nline2\nline3",
         new_string: "line1\nREPLACED\nline3",
       },
@@ -129,7 +130,7 @@ describe("condenseToolUse — Edit", () => {
     const line = condenseToolUse(
       "Edit",
       {
-        file_path: "/home/user/project/p/a.ts",
+        file_path: "/users/proj/p/a.ts",
         old_string: "x",
         new_string: "y",
         replace_all: true,
@@ -145,7 +146,7 @@ describe("condenseToolUse — Write", () => {
     const content = "line1\nline2\nline3";
     const line = condenseToolUse(
       "Write",
-      { file_path: "/home/user/project/p/out.txt", content },
+      { file_path: "/users/proj/p/out.txt", content },
       result("ok")
     );
     expect(line).toContain("Write p/out.txt");
@@ -190,11 +191,7 @@ describe("condenseToolUse — Grep / Glob", () => {
     expect(line).toContain("12 matches");
   });
   it("Glob counts lines in result", () => {
-    const line = condenseToolUse(
-      "Glob",
-      { pattern: "**/*.ts" },
-      result("a.ts\nb.ts\nc.ts")
-    );
+    const line = condenseToolUse("Glob", { pattern: "**/*.ts" }, result("a.ts\nb.ts\nc.ts"));
     expect(line).toContain("3 matches");
   });
 });
@@ -222,11 +219,7 @@ describe("condenseToolUse — playwright MCP prefix", () => {
 
 describe("condenseToolUse — generic fallback", () => {
   it("includes tool name + first scalar field", () => {
-    const line = condenseToolUse(
-      "WeirdTool",
-      { mode: "fast", count: 3 },
-      result("ok")
-    );
+    const line = condenseToolUse("WeirdTool", { mode: "fast", count: 3 }, result("ok"));
     expect(line).toContain("WeirdTool");
     expect(line).toContain("mode=");
   });

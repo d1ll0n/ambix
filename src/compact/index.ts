@@ -9,14 +9,14 @@
 import type { LogEntry, Session, ToolResultBlock } from "parse-claude-logs";
 import { isAssistantEntry, isTextBlock, isToolUseBlock } from "parse-claude-logs";
 import { estTokens } from "./condensers.js";
+import { type CompactFormat, renderCompact } from "./render.js";
 import {
+  type IndexedEntry,
+  type Round,
   buildToolResultIndex,
   groupIntoRounds,
   isWrapperOnly,
-  type IndexedEntry,
-  type Round,
 } from "./rounds.js";
-import { renderCompact, type CompactFormat } from "./render.js";
 
 export interface CompactOptions {
   /** Output format. Default `"xml"`. */
@@ -64,11 +64,7 @@ export async function compactSession(
   return { content, stats };
 }
 
-function computeStats(
-  entries: LogEntry[],
-  rounds: Round[],
-  rawRounds: number
-): CompactStats {
+function computeStats(entries: LogEntry[], rounds: Round[], rawRounds: number): CompactStats {
   let toolUses = 0;
   let assistantTextTokens = 0;
   for (const entry of entries) {
@@ -93,7 +89,7 @@ function computeStats(
 }
 
 export type { CompactFormat };
-export { type Round };
+export type { Round };
 // Keep a handle exported so a consumer can reuse a cached tool_result index
 // across multiple renders if they ever need to (e.g. rendering both XML and
 // markdown from one session instance).

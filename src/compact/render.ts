@@ -7,7 +7,7 @@
 // in a terminal or editor.
 
 import type { ToolResultBlock } from "parse-claude-logs";
-import { iterRoundStream, roundBranch, type Round } from "./rounds.js";
+import { type Round, iterRoundStream, roundBranch } from "./rounds.js";
 
 export type CompactFormat = "xml" | "markdown";
 

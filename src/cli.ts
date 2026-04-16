@@ -261,15 +261,9 @@ async function runCompact(args: string[]): Promise<number> {
       "usage: alembic compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     console.error("");
-    console.error(
-      "Produce a chronological, per-round summary of a session for context recovery."
-    );
-    console.error(
-      "Each round, tool_use, and assistant text block is tagged with a rehydration"
-    );
-    console.error(
-      "index (the same ix `alembic query <session> <ix>` resolves to), so an agent"
-    );
+    console.error("Produce a chronological, per-round summary of a session for context recovery.");
+    console.error("Each round, tool_use, and assistant text block is tagged with a rehydration");
+    console.error("index (the same ix `alembic query <session> <ix>` resolves to), so an agent");
     console.error("loading the compact output can pull full details for any entry on demand.");
     console.error("");
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
