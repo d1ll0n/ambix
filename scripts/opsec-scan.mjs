@@ -7,7 +7,7 @@
 // AND staged-but-not-yet-committed files, checking for patterns that
 // should not appear in a public repository:
 //
-//   HARD FAIL:  /home/user/ paths, email addresses, ~/.claude/projects
+//   HARD FAIL:  /root/ paths, email addresses, ~/.claude/projects
 //               directory names, session UUIDs from those projects,
 //               "superpowers" in file paths or content
 //   WARN:       username (d1ll0n / dillon)
@@ -16,9 +16,10 @@
 // local filesystem so the checks stay current without hardcoding.
 //
 // Usage:
-//   node scripts/opsec-scan.mjs           # full: all history + staged
-//   node scripts/opsec-scan.mjs --head    # HEAD tree + staged only (for pre-push)
-//   node scripts/opsec-scan.mjs --staged  # staged only (fastest)
+//   node scripts/opsec-scan.mjs             # full: all history + staged
+//   node scripts/opsec-scan.mjs --unpushed  # commits not yet on remote + HEAD (for pre-push)
+//   node scripts/opsec-scan.mjs --head      # HEAD tree only + staged
+//   node scripts/opsec-scan.mjs --staged    # staged only (fastest)
 //
 // Exit: 0 = clean, 1 = hard-fail found, 2 = internal error.
 
@@ -87,7 +88,7 @@ function buildChecks() {
   const sessions = discoverSessionIds();
 
   const checks = [
-    { name: "root path (/home/user/)", severity: "fail", re: /\/root\//g },
+    { name: "root path (/root/)", severity: "fail", re: /\/root\//g },
     { name: "username", severity: "warn", re: /\b(d1ll0n|dillon)\b/gi },
     { name: "email address", severity: "fail", re: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g },
     { name: "superpowers ref", severity: "fail", re: /superpowers/gi },
@@ -347,19 +348,118 @@ function scanHead(checks) {
 }
 
 // ---------------------------------------------------------------------------
+// Unpushed scan (commits between remote tracking branch and HEAD)
+// ---------------------------------------------------------------------------
+
+function getUnpushedRange() {
+  // Try to find the upstream tracking branch. If none, fall back to
+  // scanning all history (equivalent to first push).
+  try {
+    const upstream = execFileSync("git", ["rev-parse", "--abbrev-ref", "@{upstream}"], {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"],
+    }).trim();
+    if (upstream) return `${upstream}..HEAD`;
+  } catch {
+    // No upstream configured — scan everything.
+  }
+  return null;
+}
+
+function scanUnpushed(checks) {
+  const range = getUnpushedRange();
+  const issues = [];
+  let blobCount = 0;
+  let msgCount = 0;
+
+  // Determine which commits are unpushed.
+  let commitList;
+  if (range) {
+    try {
+      commitList = git(["rev-list", range]).trim().split("\n").filter(Boolean);
+    } catch {
+      commitList = [];
+    }
+  } else {
+    // No upstream — all commits are unpushed.
+    commitList = git(["rev-list", "--all"]).trim().split("\n").filter(Boolean);
+  }
+
+  if (commitList.length === 0) {
+    // Nothing unpushed — just scan HEAD tree as a baseline.
+    return scanHead(checks);
+  }
+
+  // Collect all unique blobs introduced in the unpushed commits.
+  const blobsBySha = new Map();
+  for (const commit of commitList) {
+    let tree;
+    try {
+      tree = git(["ls-tree", "-r", commit]);
+    } catch {
+      continue;
+    }
+    for (const line of tree.split("\n")) {
+      const m = line.match(/^\S+ blob (\S+)\s+(.+)$/);
+      if (!m) continue;
+      const [, sha, p] = m;
+      if (!blobsBySha.has(sha)) blobsBySha.set(sha, new Set());
+      blobsBySha.get(sha).add(p);
+    }
+  }
+
+  for (const [sha, paths] of blobsBySha) {
+    for (const p of paths) {
+      if (p === SELF_PATH || SKIP_PATHS.has(p)) continue;
+      issues.push(...scanText(p, checks, `${p} (path)`));
+    }
+    const shouldSkip = [...paths].every((p) => p === SELF_PATH || SKIP_PATHS.has(p));
+    if (shouldSkip) continue;
+
+    let buf;
+    try {
+      buf = gitBuf(["cat-file", "blob", sha], { stdio: ["pipe", "pipe", "ignore"] });
+    } catch {
+      continue;
+    }
+    if (buf.length > 2 * 1024 * 1024 || isBinary(buf)) continue;
+    blobCount++;
+    const label = [...paths][0];
+    issues.push(...scanText(buf.toString("utf8"), checks, label));
+  }
+
+  // Scan unpushed commit messages.
+  for (const commit of commitList) {
+    try {
+      const body = git(["log", "-1", "--format=%B", commit]).trim();
+      if (!body) continue;
+      msgCount++;
+      issues.push(...scanText(body, checks, `commit ${commit.slice(0, 8)}`));
+    } catch {
+      // skip unreadable commits
+    }
+  }
+
+  return { issues, blobCount, msgCount };
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 function main() {
   const stagedOnly = process.argv.includes("--staged");
   const headOnly = process.argv.includes("--head");
+  const unpushed = process.argv.includes("--unpushed");
   const { checks, projects, sessions } = buildChecks();
   process.stderr.write(
     `opsec-scan: ${projects.length} projects, ${sessions.length} session ids discovered\n`
   );
 
   let treeResult = { issues: [], blobCount: 0, msgCount: 0 };
-  if (headOnly) {
+  if (unpushed) {
+    treeResult = scanUnpushed(checks);
+  } else if (headOnly) {
     treeResult = scanHead(checks);
   } else if (!stagedOnly) {
     treeResult = scanHistory(checks);

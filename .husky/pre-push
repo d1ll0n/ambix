@@ -1,1 +1,1 @@
-node scripts/opsec-scan.mjs --head
+node scripts/opsec-scan.mjs --unpushed
