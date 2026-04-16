@@ -1,5 +1,5 @@
 // src/index.ts
-export const VERSION = "0.0.1";
+export const VERSION = "0.1.0";
 
 export { stage } from "./stage/index.js";
 export type { StageOptions } from "./stage/index.js";

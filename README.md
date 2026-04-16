@@ -12,11 +12,11 @@ Ambix stages, analyzes, and distills Claude Code session JSONL logs into structu
 
 ## Installation
 
-> **Note:** Ambix currently depends on `parse-cc` as a sibling checkout. A published npm release is pending.
-
 ```bash
 npm install ambix
 ```
+
+Ambix uses [parse-cc](https://github.com/d1ll0n/parse-cc) for session log parsing.
 
 ## CLI Quickstart
 
@@ -26,29 +26,98 @@ Distill a session into a structured artifact:
 ambix distill /path/to/session.jsonl
 ```
 
-This runs the full pipeline (stage → analyze → distill → merge) and writes an artifact to `~/.ambix/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
+This runs the full pipeline (stage, analyze, distill, merge) and writes an artifact to `~/.ambix/sessions/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
 
-Other subcommands:
+Produce a compact chronological summary for context recovery:
 
-- `ambix analyze <session>` — deterministic analysis only (JSON to stdout)
-- `ambix stage <session>` — stage a session into a tmp workspace
-- `ambix file-at <path> <ix>` — print a tracked file's content at a given turn
-- `ambix query <session> <subcmd>` — search within a session log
+```bash
+ambix compact /path/to/session.jsonl
+```
 
-Run `ambix help` or `ambix <subcommand> --help` for full flag documentation.
+This outputs a per-round XML summary where every tool call and assistant response is tagged with a rehydration index, so an agent can pull full details on demand via `ambix query`.
 
-> The `stage`, `file-at`, and `query` subcommands are primarily intended as tools the staged distiller agent calls during a distill run. `distill` and `analyze` are the human-facing entry points.
+### Subcommands
+
+| Command | Description |
+|---------|-------------|
+| `ambix distill <session>` | Full pipeline: stage, analyze, distill, merge, persist |
+| `ambix analyze <session>` | Deterministic analysis only (JSON to stdout) |
+| `ambix compact <session>` | Chronological per-round summary for context recovery |
+| `ambix stage <session>` | Stage a session into a tmp workspace |
+| `ambix file-at <path> <ix>` | Print a tracked file's content at a given turn index |
+| `ambix query <session> <sub>` | Search within a session log (tool-uses, tool-results, text-search, show) |
+
+Run `ambix <subcommand> --help` for full flag documentation. See [`docs/cli.md`](docs/cli.md) for the complete CLI reference.
 
 ## Concepts
 
 Ambix runs a four-stage pipeline over a Claude Code session log:
 
-1. **Stage** — copies the session into a tmp workspace and produces a condensed JSONL view with rehydrated file histories and tool result snapshots.
-2. **Analyze** — deterministic pass that computes token totals, tool usage, file churn, bash clusters, failures, and permission events.
-3. **Distill** — an agent reads the staged workspace and produces a structured `Narrative` (main task, episodes, decisions, corrections, verifications, friction points, wins, unresolved items).
-4. **Merge + Persist** — combines metadata, deterministic analysis, and narrative into a final `Artifact` persisted to `~/.ambix`.
+1. **Stage** -- copies the session into a tmp workspace and produces a condensed JSONL view with rehydrated file histories and tool result snapshots.
+2. **Analyze** -- deterministic pass that computes token totals, tool usage, file churn, bash clusters, failures, and permission events.
+3. **Distill** -- an agent reads the staged workspace and produces a structured `Narrative` (main task, episodes, decisions, corrections, verifications, friction points, wins, unresolved items).
+4. **Merge + Persist** -- combines metadata, deterministic analysis, and narrative into a final `Artifact` persisted to `~/.ambix`.
 
-See [`docs/concepts.md`](docs/concepts.md) for the full pipeline walkthrough and artifact schema.
+**Compact** is a standalone capability that produces a chronological per-round summary (XML or markdown) for context recovery, independent of the distillation pipeline.
+
+See [`docs/concepts.md`](docs/concepts.md) for the full pipeline walkthrough, compact format, and artifact schema.
+
+### Sample artifact output
+
+The final artifact written to `~/.ambix/sessions/<session-id>/artifact.json`:
+
+```jsonc
+{
+  "schema_version": "1",
+  "session_id": "abc123-...",
+  "generated_at": "2026-04-16T12:00:00Z",
+  "metadata": {
+    "session_id": "abc123-...",
+    "cwd": "/home/user/project",
+    "turn_count": 84,
+    "duration_s": 1200,
+    "end_state": "completed"
+    // ...
+  },
+  "deterministic": {
+    "tokens": {
+      "totals": { "in": 450000, "out": 38000, "cache_read": 320000, "cache_write": 95000 },
+      "by_model": { "claude-sonnet-4-6": { /* ... */ } }
+    },
+    "tools": { "invocations": { "Edit": 12, "Read": 24, "Bash": 8, "Grep": 6 } },
+    "files": { "touched": [{ "path": "src/main.ts", "reads": 3, "edits": 5, "writes": 1 }] },
+    "bash_clusters": [{ "pattern": "npm", "count": 4 }],
+    "failures": [],
+    "subagents": []
+    // ...
+  },
+  "narrative": {
+    "summary": "Implemented user authentication with JWT tokens and added login/logout endpoints.",
+    "main_tasks": [
+      { "title": "Add JWT auth", "status": "verified", "description": "...", "refs": [0, 84] }
+    ],
+    "episodes": [
+      { "title": "Research auth patterns", "kind": "research", "ix_range": [0, 12], "summary": "...", "refs": [2, 8] },
+      { "title": "Implement login endpoint", "kind": "implementation", "ix_range": [13, 45], "summary": "...", "refs": [15, 30] }
+    ],
+    "decisions": [
+      { "description": "Chose JWT over session cookies", "rationale": "Stateless, works with API clients", "refs": [5] }
+    ],
+    "corrections": [],
+    "verification": { "was_verified": true, "how": "Ran test suite, all 12 tests pass", "refs": [80] },
+    "friction_points": [],
+    "wins": [{ "description": "Tests passed on first run", "refs": [80] }],
+    "unresolved": []
+  }
+}
+```
+
+## Docs
+
+| I want to... | Doc |
+|--------------|-----|
+| See every CLI flag and subcommand | [CLI reference](docs/cli.md) |
+| Understand the pipeline stages and artifact schema | [Concepts](docs/concepts.md) |
 
 ## Programmatic API
 
@@ -67,6 +136,8 @@ if (result.success) {
 }
 ```
 
+See `RunOptions` and `RunResult` types for the full set of options and return values.
+
 Lower-level building blocks:
 
 ```typescript
@@ -83,6 +154,16 @@ const file = await fileAt({
 });
 ```
 
+## Development
+
+```bash
+npm install
+npm run build       # compile TypeScript
+npm test            # run tests (vitest)
+npm run lint        # biome check
+npm run typecheck   # tsc --noEmit
+```
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).
