@@ -224,9 +224,9 @@ describe("emit", () => {
     expect(stats.preservedEntryCount).toBe(2);
   });
 
-  it("stub references the ORIGINAL session's turn index (not the new session's)", async () => {
-    // Five pre-round entries so tu_X sits at ix=2 in source; in emit output
-    // the ix in the stub should still be 2, not the emitted position.
+  it("stub references the tool_result's own source ix (so `ambix query` returns the result body, not the tool_use)", async () => {
+    // Layout: tool_use at source ix=3, tool_result at source ix=4.
+    // The stub sits in the tool_result entry → should reference ix=4.
     const entries = await loadSession(
       joinLines(
         userLine({ text: "lead-in", uuid: "pad1" }),
@@ -265,8 +265,9 @@ describe("emit", () => {
     expect(stubbed).toBeDefined();
     const stubText = (stubbed!.message as { content: Array<{ content: string }> }).content[0]
       .content;
-    // Tool_use (ix=3 in the SOURCE) is what the stub should reference — that's what `ambix query` resolves.
-    expect(stubText).toMatch(/ambix query orig-sess 3/);
+    // tool_result is at source ix=4 (tool_use at ix=3); stub must reference ix=4
+    // so `ambix query` resolves to the result body rather than the call itself.
+    expect(stubText).toMatch(/ambix query orig-sess 4/);
   });
 
   it("regenerates promptId, requestId, and message.id so no source-session routing IDs leak through", async () => {

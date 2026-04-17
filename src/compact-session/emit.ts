@@ -115,6 +115,7 @@ export function emit(opts: EmitOptions): EmitResult {
     const newUuid = uuidFn();
     const { entry: newEntry, hasUuid } = rewriteEntry({
       source,
+      sourceIx: ix,
       newUuid,
       newSessionId: opts.newSessionId,
       parentUuid: prevUuid,
@@ -148,6 +149,8 @@ export function emit(opts: EmitOptions): EmitResult {
 
 interface RewriteOpts {
   source: LogEntry;
+  /** Source ix of this entry — embedded in stubs so `ambix query <id> <ix>` resolves to this tool_result, not its paired tool_use. */
+  sourceIx: number;
   newUuid: string;
   newSessionId: string;
   parentUuid: string | null;
@@ -184,6 +187,7 @@ function rewriteEntry(opts: RewriteOpts): { entry: Record<string, unknown>; hasU
   if (opts.condense && isUserEntry(opts.source)) {
     stubToolResultsInUserEntry(
       cloned,
+      opts.sourceIx,
       opts.origSessionId,
       opts.toolUseMap,
       opts.ambixCmd,
@@ -215,6 +219,7 @@ function regenerateRoutingIds(cloned: Record<string, unknown>, uuidFn: () => str
 
 function stubToolResultsInUserEntry(
   cloned: Record<string, unknown>,
+  sourceIx: number,
   origSessionId: string,
   toolUseMap: Map<string, { name: string; input: unknown; ix: number }>,
   ambixCmd: string | undefined,
@@ -229,9 +234,12 @@ function stubToolResultsInUserEntry(
     const resultBlk = blk as unknown as ToolResultBlock;
     const toolInfo = toolUseMap.get(resultBlk.tool_use_id);
     const originalBytes = measureToolResultBytes(resultBlk);
+    // Use the tool_result entry's own ix (this entry), NOT the paired tool_use's,
+    // so `ambix query <session> <ix>` returns the original tool_result body
+    // rather than the tool_use call (which is already visible in the compacted file).
     const stub = buildStub({
       origSessionId,
-      ix: toolInfo?.ix ?? -1,
+      ix: sourceIx,
       toolName: toolInfo?.name ?? "unknown",
       toolInput: toolInfo?.input ?? {},
       originalResult: resultBlk,
