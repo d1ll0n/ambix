@@ -1,15 +1,23 @@
 // src/compact-session/emit.ts
 import { randomUUID } from "node:crypto";
 import type { LogEntry, ToolResultBlock } from "parse-cc";
-import { isAssistantEntry, isToolResultBlock, isToolUseBlock, isUserEntry } from "parse-cc";
+import {
+  isAssistantEntry,
+  isFileHistorySnapshotEntry,
+  isToolResultBlock,
+  isToolUseBlock,
+  isUserEntry,
+} from "parse-cc";
 import { groupIntoRounds } from "../brief/rounds.js";
 import { buildStub, measureToolResultBytes } from "./stub.js";
 import { buildSummaryEntry } from "./summary.js";
 import { truncateOversizedStrings } from "./truncate.js";
 import type { CompactSessionStats } from "./types.js";
 
-/** Max UTF-8 bytes for any single string field inside a condensed tool_use.input. */
-const CONDENSED_INPUT_MAX_FIELD_BYTES = 500;
+/** Default UTF-8 byte threshold for single-string-field truncation in condensed entries. */
+export const DEFAULT_MAX_FIELD_BYTES = 500;
+/** Default number of chars retained as a preview in front of the truncation marker. */
+export const DEFAULT_PREVIEW_CHARS = 100;
 
 export interface EmitOptions {
   /** Source session's deduped entry stream. */
@@ -32,6 +40,10 @@ export interface EmitOptions {
   uuidFn?: () => string;
   /** Stub command prefix override. Default `"ambix query"`. */
   ambixCmd?: string;
+  /** UTF-8 byte threshold for single-field truncation. Default {@link DEFAULT_MAX_FIELD_BYTES}. */
+  maxFieldBytes?: number;
+  /** Preview chars kept in front of the truncation marker. Default {@link DEFAULT_PREVIEW_CHARS}. */
+  previewChars?: number;
 }
 
 export interface EmitResult {
@@ -75,6 +87,7 @@ export function emit(opts: EmitOptions): EmitResult {
     sourceEntryCount: entries.length,
     condensedEntryCount: 0,
     preservedEntryCount: 0,
+    droppedEntryCount: 0,
     stubbedToolResultCount: 0,
     truncatedInputFieldCount: 0,
     bytesSaved: 0,
@@ -117,6 +130,19 @@ export function emit(opts: EmitOptions): EmitResult {
 
     const inPreserved = ix >= preservedFirstIx;
     const source = entries[ix];
+
+    // Drop file-history-snapshot entries in the condensed section. They carry
+    // CC's per-file backup metadata (trackedFileBackups maps) that CC never
+    // feeds to the model on resume — pure bookkeeping, often 8+ KB each and
+    // ~100s per session. The preserved section keeps them verbatim so CC's
+    // own file-history tooling stays intact for the recent window.
+    if (!inPreserved && isFileHistorySnapshotEntry(source)) {
+      const dropped = Buffer.byteLength(JSON.stringify(source), "utf8");
+      stats.droppedEntryCount += 1;
+      stats.bytesSaved += dropped;
+      continue;
+    }
+
     const newUuid = uuidFn();
     const { entry: newEntry, hasUuid } = rewriteEntry({
       source,
@@ -128,6 +154,8 @@ export function emit(opts: EmitOptions): EmitResult {
       origSessionId: opts.origSessionId,
       toolUseMap,
       ambixCmd: opts.ambixCmd,
+      maxFieldBytes: opts.maxFieldBytes,
+      previewChars: opts.previewChars,
       stats,
       uuidFn,
     });
@@ -164,6 +192,8 @@ interface RewriteOpts {
   origSessionId: string;
   toolUseMap: Map<string, { name: string; input: unknown; ix: number }>;
   ambixCmd?: string;
+  maxFieldBytes?: number;
+  previewChars?: number;
   stats: CompactSessionStats;
   uuidFn: () => string;
 }
@@ -197,6 +227,8 @@ function rewriteEntry(opts: RewriteOpts): { entry: Record<string, unknown>; hasU
       opts.origSessionId,
       opts.toolUseMap,
       opts.ambixCmd,
+      opts.maxFieldBytes,
+      opts.previewChars,
       opts.stats
     );
   }
@@ -244,11 +276,15 @@ function condenseEntry(
   origSessionId: string,
   toolUseMap: Map<string, { name: string; input: unknown; ix: number }>,
   ambixCmd: string | undefined,
+  maxFieldBytes: number | undefined,
+  previewChars: number | undefined,
   stats: CompactSessionStats
 ): void {
   const cmd = ambixCmd ?? "ambix query";
+  const threshold = maxFieldBytes ?? DEFAULT_MAX_FIELD_BYTES;
+  const preview = previewChars ?? DEFAULT_PREVIEW_CHARS;
   const marker = `[COMPACTION STUB — field truncated. Retrieve full entry via: ${cmd} ${origSessionId} ${sourceIx}]`;
-  const sweepOpts = { maxFieldBytes: CONDENSED_INPUT_MAX_FIELD_BYTES, marker };
+  const sweepOpts = { maxFieldBytes: threshold, marker, previewChars: preview };
 
   // 1. Tool_result stubbing (user entries) — preserves tool_use→tool_result
   //    pairing with a descriptive one-liner rather than a generic marker.
@@ -300,7 +336,7 @@ function condenseEntry(
     if (k === "message") continue;
     if (k === "toolUseResult" && v !== null && v !== undefined) {
       const originalBytes = Buffer.byteLength(JSON.stringify(v), "utf8");
-      if (originalBytes > CONDENSED_INPUT_MAX_FIELD_BYTES) {
+      if (originalBytes > threshold) {
         cloned[k] = marker;
         stats.truncatedInputFieldCount += 1;
         stats.bytesSaved += Math.max(0, originalBytes - Buffer.byteLength(marker, "utf8"));

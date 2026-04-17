@@ -57,6 +57,8 @@ export async function compactSession(
     cwd,
     gitBranch,
     version,
+    maxFieldBytes: opts.maxFieldBytes,
+    previewChars: opts.previewChars,
   });
 
   let copiedTasksDir: string | null = null;

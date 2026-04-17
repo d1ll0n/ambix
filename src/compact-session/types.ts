@@ -27,6 +27,18 @@ export interface CompactSessionOptions {
    * real callers should leave this undefined.
    */
   tasksBaseDir?: string;
+  /**
+   * UTF-8 byte threshold above which a string field in the condensed
+   * section gets replaced with a truncation marker (plus a short preview).
+   * Default: 500.
+   */
+  maxFieldBytes?: number;
+  /**
+   * Number of chars of the original field to keep as a preview inside
+   * `<truncated>…</truncated>` tags before the truncation marker. Set to
+   * 0 to disable previews. Default: 100.
+   */
+  previewChars?: number;
 }
 
 /** Result of a compact-session run. */
@@ -54,6 +66,11 @@ export interface CompactSessionStats {
   condensedEntryCount: number;
   /** Entries emitted in the preserved (post-divider) section. */
   preservedEntryCount: number;
+  /**
+   * Source entries dropped entirely from the condensed section
+   * (`file-history-snapshot` bookkeeping that CC never feeds to the model).
+   */
+  droppedEntryCount: number;
   /** Number of tool_result bodies replaced with stubs in the condensed section. */
   stubbedToolResultCount: number;
   /**

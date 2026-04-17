@@ -379,6 +379,41 @@ describe("emit", () => {
     expect(stats.bytesSaved).toBeGreaterThan(3000); // roughly 2×2000 bytes minus marker overhead
   });
 
+  it("drops file-history-snapshot entries in the condensed section but keeps them in the preserved section", async () => {
+    const fhSnapshot = JSON.stringify({
+      type: "file-history-snapshot",
+      messageId: "msg_A",
+      isSnapshotUpdate: true,
+      snapshot: {
+        messageId: "msg_A",
+        timestamp: "2026-04-17T12:00:00.000Z",
+        trackedFileBackups: {},
+      },
+    });
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "round 1", uuid: "u1" }),
+        assistantLine({ text: "reply 1", uuid: "a1" }),
+        fhSnapshot, // should be dropped (in condensed section)
+        userLine({ text: "round 2", uuid: "u2" }),
+        assistantLine({ text: "reply 2", uuid: "a2" }),
+        fhSnapshot // should be kept (in preserved section)
+      )
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    expect(stats.droppedEntryCount).toBe(1);
+    // Only one file-history-snapshot makes it to output (the preserved one)
+    const snapshots = out.filter((e) => e.type === "file-history-snapshot");
+    expect(snapshots).toHaveLength(1);
+  });
+
   it("empty source — just emits a divider with preservedFirstIx past end", () => {
     const { entries: out, stats } = emit({
       ...baseEmit,

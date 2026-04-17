@@ -5,6 +5,13 @@ export interface TruncateOptions {
   maxFieldBytes: number;
   /** Replacement string substituted for oversized values. Should reference rehydration. */
   marker: string;
+  /**
+   * If set, prepend the first N chars of the original string (wrapped in
+   * `<truncated>…</truncated>` tags + ellipsis) before the marker. Gives
+   * the agent a small signal about what was there without forcing a
+   * rehydration call for obvious cases. Default: no preview (marker only).
+   */
+  previewChars?: number;
 }
 
 export interface TruncateStats {
@@ -35,8 +42,9 @@ export function truncateOversizedStrings(
     const bytes = Buffer.byteLength(value, "utf8");
     if (bytes > opts.maxFieldBytes) {
       stats.truncatedFieldCount += 1;
-      stats.bytesSaved += Math.max(0, bytes - Buffer.byteLength(opts.marker, "utf8"));
-      return opts.marker;
+      const replacement = buildReplacement(value, opts);
+      stats.bytesSaved += Math.max(0, bytes - Buffer.byteLength(replacement, "utf8"));
+      return replacement;
     }
     return value;
   }
@@ -54,4 +62,10 @@ export function truncateOversizedStrings(
     return value;
   }
   return value;
+}
+
+function buildReplacement(original: string, opts: TruncateOptions): string {
+  if (!opts.previewChars || opts.previewChars <= 0) return opts.marker;
+  const preview = original.slice(0, opts.previewChars);
+  return `<truncated>\n${preview}…\n</truncated>\n${opts.marker}`;
 }

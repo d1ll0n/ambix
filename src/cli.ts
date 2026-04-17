@@ -368,16 +368,22 @@ async function runCompact(args: string[]): Promise<number> {
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
     console.error("flags:");
-    console.error("  --full-recent N   rounds to preserve verbatim at the tail (default: 10)");
-    console.error("  --output <path>   override destination path");
-    console.error("  --dry-run         print the plan without writing");
+    console.error("  --full-recent N       rounds to preserve verbatim at the tail (default: 10)");
+    console.error(
+      "  --max-field-bytes N   truncate any condensed string field over N bytes (default: 500)"
+    );
+    console.error(
+      "  --preview-chars N     keep first N chars of truncated fields as preview (default: 100, 0 disables)"
+    );
+    console.error("  --output <path>       override destination path");
+    console.error("  --dry-run             print the plan without writing");
     return 0;
   }
   const sessionArg = args[0];
   if (!sessionArg) {
     console.error("ambix compact: missing <session-path-or-id>");
     console.error(
-      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--max-field-bytes N] [--preview-chars N] [--output <path>] [--dry-run]"
     );
     return 1;
   }
@@ -388,6 +394,24 @@ async function runCompact(args: string[]): Promise<number> {
     fullRecent = Number.parseInt(fullRecentArg, 10);
     if (Number.isNaN(fullRecent) || fullRecent < 0) {
       console.error(`ambix compact: invalid --full-recent: ${fullRecentArg}`);
+      return 1;
+    }
+  }
+  const maxFieldBytesArg = parseFlag(args, "--max-field-bytes");
+  let maxFieldBytes: number | undefined;
+  if (maxFieldBytesArg !== undefined) {
+    maxFieldBytes = Number.parseInt(maxFieldBytesArg, 10);
+    if (Number.isNaN(maxFieldBytes) || maxFieldBytes < 0) {
+      console.error(`ambix compact: invalid --max-field-bytes: ${maxFieldBytesArg}`);
+      return 1;
+    }
+  }
+  const previewCharsArg = parseFlag(args, "--preview-chars");
+  let previewChars: number | undefined;
+  if (previewCharsArg !== undefined) {
+    previewChars = Number.parseInt(previewCharsArg, 10);
+    if (Number.isNaN(previewChars) || previewChars < 0) {
+      console.error(`ambix compact: invalid --preview-chars: ${previewCharsArg}`);
       return 1;
     }
   }
@@ -403,16 +427,23 @@ async function runCompact(args: string[]): Promise<number> {
   }
 
   const session = new Session(sessionPath);
-  const result = await compactSession(session, { fullRecent, output, dryRun });
+  const result = await compactSession(session, {
+    fullRecent,
+    output,
+    dryRun,
+    maxFieldBytes,
+    previewChars,
+  });
 
   const prefix = result.dryRun ? "[dry-run] would write" : "wrote";
   console.error(
     `${prefix} compacted session to ${result.destPath} ` +
       `(${result.stats.sourceEntryCount} source entries → ` +
       `${result.stats.condensedEntryCount} condensed + ` +
-      `${result.stats.preservedEntryCount} preserved, ` +
+      `${result.stats.preservedEntryCount} preserved + ` +
+      `${result.stats.droppedEntryCount} dropped, ` +
       `${result.stats.stubbedToolResultCount} tool_result stubs, ` +
-      `${result.stats.truncatedInputFieldCount} tool_use fields truncated, ` +
+      `${result.stats.truncatedInputFieldCount} fields truncated, ` +
       `~${result.stats.bytesSaved} bytes saved)`
   );
   if (result.copiedTasksDir) {
