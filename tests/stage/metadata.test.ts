@@ -54,18 +54,25 @@ describe("buildMetadata", () => {
     expect(meta.source_path).toBe(fixturePath);
   });
 
-  it("reports end_state=ongoing when isOngoing returns true", async () => {
-    const text = joinLines(
-      userLine({ text: "hi", ts: "2026-04-13T10:00:00Z" })
-      // no assistant turn — looks unfinished
-    );
+  it("reports end_state=unknown for a user-only session (no assistant turn)", async () => {
+    const text = joinLines(userLine({ text: "hi", ts: "2026-04-13T10:00:00Z" }));
     const fixturePath = writeFixture(dir, "session.jsonl", text);
     const session = new Session(fixturePath);
 
     const meta = await buildMetadata(session);
-    // A user-only session is considered ongoing by the existing isOngoing logic.
-    // If that turns out wrong empirically, adjust the assertion to "unknown".
-    expect(["ongoing", "unknown", "completed"]).toContain(meta.end_state);
+    // parse-cc's isOngoing returns false for user-only sessions (nothing
+    // happened from its point of view), but they're not "completed" —
+    // they're ambiguous. buildMetadata distinguishes these as "unknown".
+    expect(meta.end_state).toBe("unknown");
+  });
+
+  it("reports end_state=unknown for an empty session", async () => {
+    const fixturePath = writeFixture(dir, "session.jsonl", "");
+    const session = new Session(fixturePath);
+
+    const meta = await buildMetadata(session);
+    expect(meta.end_state).toBe("unknown");
+    expect(meta.turn_count).toBe(0);
   });
 
   it("populates query_targets for parent and subagent", async () => {

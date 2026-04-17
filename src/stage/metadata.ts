@@ -1,6 +1,6 @@
 // src/stage/metadata.ts
 import path from "node:path";
-import type { Session } from "parse-cc";
+import { type LogEntry, type Session, isAssistantEntry } from "parse-cc";
 import type { MetadataJson } from "../types.js";
 
 /**
@@ -36,9 +36,26 @@ export async function buildMetadata(session: Session): Promise<MetadataJson> {
     end_ts: lastTs,
     duration_s: duration,
     turn_count: messages.length,
-    end_state: ongoing ? "ongoing" : "completed",
+    end_state: resolveEndState(messages, ongoing),
     query_targets,
   };
+}
+
+/**
+ * Decide between "completed", "ongoing", and "unknown" for a session.
+ *
+ * parse-cc's `isOngoing` is an activity-index check over assistant blocks;
+ * it returns `false` for user-only sessions (which look "done" by its
+ * lights even though nothing has happened yet), and that was being mapped
+ * to "completed" — misleading in `ambix info` output. Treat any session
+ * without an assistant turn as "unknown" instead.
+ */
+function resolveEndState(
+  messages: ReadonlyArray<LogEntry>,
+  ongoing: boolean
+): MetadataJson["end_state"] {
+  if (ongoing) return "ongoing";
+  return messages.some(isAssistantEntry) ? "completed" : "unknown";
 }
 
 function firstNonNullTimestamp(messages: ReadonlyArray<unknown>): string | null {
