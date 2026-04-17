@@ -1,0 +1,207 @@
+// src/compact-session/emit.ts
+import { randomUUID } from "node:crypto";
+import type { LogEntry, ToolResultBlock } from "parse-cc";
+import { isAssistantEntry, isToolResultBlock, isToolUseBlock, isUserEntry } from "parse-cc";
+import { groupIntoRounds } from "../brief/rounds.js";
+import { buildStub, measureToolResultBytes } from "./stub.js";
+import { buildSummaryEntry } from "./summary.js";
+import type { CompactSessionStats } from "./types.js";
+
+export interface EmitOptions {
+  /** Source session's deduped entry stream. */
+  sourceEntries: ReadonlyArray<LogEntry>;
+  /** UUID assigned to the new compacted session. */
+  newSessionId: string;
+  /** UUID of the source session — cited in stubs. */
+  origSessionId: string;
+  /** N rounds to preserve verbatim at the tail. */
+  fullRecent: number;
+  /** Metadata copied onto the divider. */
+  cwd: string;
+  gitBranch: string;
+  version: string;
+  /** Override summary uuid / promptId / timestamp (for deterministic tests). */
+  summaryUuid?: string;
+  summaryPromptId?: string;
+  summaryTimestamp?: string;
+  /** Override every per-entry uuid (for deterministic tests). Default: randomUUID. */
+  uuidFn?: () => string;
+  /** Stub command prefix override. Default `"ambix query"`. */
+  ambixCmd?: string;
+}
+
+export interface EmitResult {
+  entries: ReadonlyArray<Record<string, unknown>>;
+  stats: CompactSessionStats;
+}
+
+/**
+ * Walk a source session's entries and emit the compacted sequence:
+ *   [condensed entries with stubbed tool_result bodies]
+ *   [isCompactSummary divider]
+ *   [preserved-verbatim entries]
+ *
+ * parentUuid chain is rebuilt so the emitted file is a self-contained
+ * linear conversation. sessionId on every emitted entry is the new UUID.
+ */
+export function emit(opts: EmitOptions): EmitResult {
+  const uuidFn = opts.uuidFn ?? randomUUID;
+  const entries = opts.sourceEntries;
+
+  // Where does the preserved (verbatim) section begin? Last N rounds, taking
+  // the `userIx` of the first preserved round as the split point.
+  const indexed = entries.map((entry, ix) => ({ entry, ix }));
+  const rounds = groupIntoRounds(indexed);
+  const preservedRounds = opts.fullRecent > 0 ? rounds.slice(-opts.fullRecent) : [];
+  const preservedFirstIx = preservedRounds.length > 0 ? preservedRounds[0].userIx : entries.length;
+
+  // Index tool_use_id → { name, input, sourceIx } for stub construction.
+  const toolUseMap = new Map<string, { name: string; input: unknown; ix: number }>();
+  for (let ix = 0; ix < entries.length; ix++) {
+    const e = entries[ix];
+    if (!isAssistantEntry(e)) continue;
+    for (const blk of e.message.content) {
+      if (isToolUseBlock(blk)) {
+        toolUseMap.set(blk.id, { name: blk.name, input: blk.input, ix });
+      }
+    }
+  }
+
+  const stats: CompactSessionStats = {
+    sourceEntryCount: entries.length,
+    condensedEntryCount: 0,
+    preservedEntryCount: 0,
+    stubbedToolResultCount: 0,
+    bytesSaved: 0,
+  };
+
+  const emitted: Record<string, unknown>[] = [];
+  let prevUuid: string | null = null;
+  let dividerInserted = false;
+
+  const insertDivider = (
+    condensedLastIx: number,
+    preservedFirstIxArg: number,
+    lastSourceIx: number
+  ) => {
+    const divider = buildSummaryEntry({
+      origSessionId: opts.origSessionId,
+      newSessionId: opts.newSessionId,
+      parentUuid: prevUuid,
+      cwd: opts.cwd,
+      gitBranch: opts.gitBranch,
+      version: opts.version,
+      condensedLastIx,
+      preservedFirstIx: preservedFirstIxArg,
+      lastSourceIx,
+      fullRecent: opts.fullRecent,
+      uuid: opts.summaryUuid,
+      promptId: opts.summaryPromptId,
+      now: opts.summaryTimestamp,
+    });
+    emitted.push(divider);
+    prevUuid = divider.uuid as string;
+    dividerInserted = true;
+  };
+
+  for (let ix = 0; ix < entries.length; ix++) {
+    // Insert divider at the split point (between last condensed and first preserved)
+    if (ix === preservedFirstIx && !dividerInserted) {
+      insertDivider(ix - 1, preservedFirstIx, entries.length - 1);
+    }
+
+    const inPreserved = ix >= preservedFirstIx;
+    const source = entries[ix];
+    const newUuid = uuidFn();
+    const newEntry = rewriteEntry({
+      source,
+      newUuid,
+      newSessionId: opts.newSessionId,
+      parentUuid: prevUuid,
+      condense: !inPreserved,
+      origSessionId: opts.origSessionId,
+      toolUseMap,
+      ambixCmd: opts.ambixCmd,
+      stats,
+    });
+    emitted.push(newEntry);
+    prevUuid = newUuid;
+
+    if (inPreserved) stats.preservedEntryCount++;
+    else stats.condensedEntryCount++;
+  }
+
+  // If `--full-recent N` >= round count, everything is condensed (preservedFirstIx
+  // is past the end) — append the divider at the end so the agent still has the
+  // explanatory preamble. condensedLastIx = last source ix, preservedFirstIx
+  // past-the-end marks empty preserved.
+  if (!dividerInserted) {
+    insertDivider(entries.length - 1, entries.length, entries.length - 1);
+  }
+
+  return { entries: emitted, stats };
+}
+
+interface RewriteOpts {
+  source: LogEntry;
+  newUuid: string;
+  newSessionId: string;
+  parentUuid: string | null;
+  /** When true, user tool_result blocks have their `content` swapped for a stub. */
+  condense: boolean;
+  origSessionId: string;
+  toolUseMap: Map<string, { name: string; input: unknown; ix: number }>;
+  ambixCmd?: string;
+  stats: CompactSessionStats;
+}
+
+function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
+  // Clone to avoid mutating the source entry (parse-cc returns shared objects).
+  const cloned = JSON.parse(JSON.stringify(opts.source)) as Record<string, unknown>;
+
+  cloned.uuid = opts.newUuid;
+  cloned.parentUuid = opts.parentUuid;
+  cloned.sessionId = opts.newSessionId;
+
+  if (opts.condense && isUserEntry(opts.source)) {
+    stubToolResultsInUserEntry(
+      cloned,
+      opts.origSessionId,
+      opts.toolUseMap,
+      opts.ambixCmd,
+      opts.stats
+    );
+  }
+
+  return cloned;
+}
+
+function stubToolResultsInUserEntry(
+  cloned: Record<string, unknown>,
+  origSessionId: string,
+  toolUseMap: Map<string, { name: string; input: unknown; ix: number }>,
+  ambixCmd: string | undefined,
+  stats: CompactSessionStats
+): void {
+  const msg = cloned.message as { content: unknown };
+  const content = msg.content;
+  if (!Array.isArray(content)) return;
+  for (let i = 0; i < content.length; i++) {
+    const blk = content[i] as Record<string, unknown>;
+    if (!isToolResultBlock(blk as unknown as ToolResultBlock)) continue;
+    const resultBlk = blk as unknown as ToolResultBlock;
+    const toolInfo = toolUseMap.get(resultBlk.tool_use_id);
+    const originalBytes = measureToolResultBytes(resultBlk);
+    const stub = buildStub({
+      origSessionId,
+      ix: toolInfo?.ix ?? -1,
+      toolName: toolInfo?.name ?? "unknown",
+      toolInput: toolInfo?.input ?? {},
+      originalResult: resultBlk,
+      ambixCmd,
+    });
+    blk.content = stub;
+    stats.stubbedToolResultCount++;
+    stats.bytesSaved += Math.max(0, originalBytes - Buffer.byteLength(stub, "utf8"));
+  }
+}

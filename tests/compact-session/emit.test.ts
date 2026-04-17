@@ -1,0 +1,286 @@
+import { Session } from "parse-cc";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { emit } from "../../src/compact-session/emit.js";
+import {
+  assistantLine,
+  cleanupTempDir,
+  joinLines,
+  makeTempDir,
+  toolResultUserLine,
+  toolUseAssistantLine,
+  userLine,
+  writeFixture,
+} from "../helpers/fixtures.js";
+
+// Deterministic uuid generator for tests — returns predictable strings.
+function makeUuidFn() {
+  let i = 0;
+  return () => `u${(++i).toString().padStart(3, "0")}`;
+}
+
+const baseEmit = {
+  newSessionId: "new-sess",
+  origSessionId: "orig-sess",
+  cwd: "/work",
+  gitBranch: "main",
+  version: "2.1.110",
+  summaryUuid: "summary",
+  summaryPromptId: "prompt",
+  summaryTimestamp: "2026-04-17T12:00:00.000Z",
+};
+
+describe("emit", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+  afterEach(() => {
+    cleanupTempDir(dir);
+  });
+
+  async function loadSession(text: string) {
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    return session.messages();
+  }
+
+  it("normal split — condenses earlier rounds, preserves last N, divider between", async () => {
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "round 1", uuid: "s1" }),
+        assistantLine({ text: "r1 reply", uuid: "s2" }),
+        userLine({ text: "round 2", uuid: "s3" }),
+        assistantLine({ text: "r2 reply", uuid: "s4" })
+      )
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    // 4 source entries + 1 divider = 5 emitted
+    expect(out).toHaveLength(5);
+    expect(stats.sourceEntryCount).toBe(4);
+    expect(stats.condensedEntryCount).toBe(2); // round 1 (user + assistant)
+    expect(stats.preservedEntryCount).toBe(2); // round 2
+
+    // Divider sits between round 1 and round 2
+    expect(out[0].type).toBe("user"); // round 1 user
+    expect(out[1].type).toBe("assistant"); // round 1 assistant
+    expect(out[2].isCompactSummary).toBe(true); // divider
+    expect(out[3].type).toBe("user"); // round 2 user
+    expect(out[4].type).toBe("assistant"); // round 2 assistant
+  });
+
+  it("rewrites sessionId on every emitted entry", async () => {
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "hi", sessionId: "original-session-uuid" }),
+        assistantLine({ text: "hi back", sessionId: "original-session-uuid" })
+      )
+    );
+
+    const { entries: out } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 10,
+      uuidFn: makeUuidFn(),
+    });
+
+    for (const e of out) {
+      expect(e.sessionId).toBe("new-sess");
+    }
+  });
+
+  it("rebuilds parentUuid chain linearly — first=null, subsequent=previous.uuid", async () => {
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "1", uuid: "a" }),
+        assistantLine({ text: "2", uuid: "b" }),
+        userLine({ text: "3", uuid: "c" }),
+        assistantLine({ text: "4", uuid: "d" })
+      )
+    );
+
+    const { entries: out } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    expect(out[0].parentUuid).toBeNull();
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i].parentUuid).toBe(out[i - 1].uuid);
+    }
+  });
+
+  it("stubs tool_result content in condensed section; preserves it in the preserved section", async () => {
+    const entries = await loadSession(
+      joinLines(
+        // Round 1 — should be condensed
+        userLine({ text: "read a file", uuid: "u1" }),
+        toolUseAssistantLine({
+          name: "Read",
+          input: { file_path: "/tmp/a.txt" },
+          toolUseId: "tu_A",
+          uuid: "a1",
+        }),
+        toolResultUserLine({
+          toolUseId: "tu_A",
+          content: "AAA".repeat(200), // 600 bytes
+          uuid: "r1",
+        }),
+        // Round 2 — should be preserved
+        userLine({ text: "read another", uuid: "u2" }),
+        toolUseAssistantLine({
+          name: "Read",
+          input: { file_path: "/tmp/b.txt" },
+          toolUseId: "tu_B",
+          uuid: "a2",
+        }),
+        toolResultUserLine({
+          toolUseId: "tu_B",
+          content: "BBB".repeat(200), // 600 bytes
+          uuid: "r2",
+        })
+      )
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    // Find the tool_result entries by shape
+    const toolResultEntries = out.filter((e) => {
+      const msg = (e as { message?: { content?: unknown } }).message;
+      if (!msg?.content || !Array.isArray(msg.content)) return false;
+      return (msg.content as Array<{ type?: string }>).some((b) => b.type === "tool_result");
+    });
+    expect(toolResultEntries).toHaveLength(2);
+
+    // First is condensed → stubbed
+    const condensedContent = (
+      toolResultEntries[0].message as { content: Array<{ content: string }> }
+    ).content[0].content;
+    expect(condensedContent).toContain("[COMPACTION STUB");
+    expect(condensedContent).toContain("ambix query orig-sess");
+    expect(condensedContent).not.toContain("AAA");
+
+    // Second is preserved → passes through
+    const preservedContent = (
+      toolResultEntries[1].message as { content: Array<{ content: unknown }> }
+    ).content[0].content;
+    expect(preservedContent).toContain("BBB");
+    expect(String(preservedContent)).not.toContain("COMPACTION STUB");
+
+    expect(stats.stubbedToolResultCount).toBe(1);
+    expect(stats.bytesSaved).toBeGreaterThan(0);
+  });
+
+  it("--full-recent 0 — everything condensed, divider at end", async () => {
+    const entries = await loadSession(
+      joinLines(userLine({ text: "1", uuid: "a" }), assistantLine({ text: "2", uuid: "b" }))
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 0,
+      uuidFn: makeUuidFn(),
+    });
+
+    expect(out).toHaveLength(3); // 2 entries + divider
+    expect(out[0].type).toBe("user");
+    expect(out[1].type).toBe("assistant");
+    expect(out[2].isCompactSummary).toBe(true); // divider at the end
+    expect(stats.condensedEntryCount).toBe(2);
+    expect(stats.preservedEntryCount).toBe(0);
+  });
+
+  it("--full-recent > roundCount — everything preserved, divider at start", async () => {
+    const entries = await loadSession(
+      joinLines(userLine({ text: "only", uuid: "a" }), assistantLine({ text: "reply", uuid: "b" }))
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 100,
+      uuidFn: makeUuidFn(),
+    });
+
+    expect(out).toHaveLength(3); // divider + 2 entries
+    expect(out[0].isCompactSummary).toBe(true); // divider at start
+    expect((out[0] as { parentUuid: string | null }).parentUuid).toBeNull();
+    expect(out[1].type).toBe("user");
+    expect(out[2].type).toBe("assistant");
+    expect(stats.condensedEntryCount).toBe(0);
+    expect(stats.preservedEntryCount).toBe(2);
+  });
+
+  it("stub references the ORIGINAL session's turn index (not the new session's)", async () => {
+    // Five pre-round entries so tu_X sits at ix=2 in source; in emit output
+    // the ix in the stub should still be 2, not the emitted position.
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "lead-in", uuid: "pad1" }),
+        assistantLine({ text: "ack", uuid: "pad2" }),
+        userLine({ text: "do the thing", uuid: "u1" }),
+        toolUseAssistantLine({
+          name: "Bash",
+          input: { command: "echo hi" },
+          toolUseId: "tu_X",
+          uuid: "a1",
+        }),
+        toolResultUserLine({ toolUseId: "tu_X", content: "hi", uuid: "r1" }),
+        // Round containing the preserved tail
+        userLine({ text: "later", uuid: "u2" }),
+        assistantLine({ text: "ok", uuid: "a2" })
+      )
+    );
+
+    const { entries: out } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    const stubbed = out.find((e) => {
+      const msg = (e as { message?: { content?: unknown } }).message;
+      if (!msg?.content || !Array.isArray(msg.content)) return false;
+      const blk = (msg.content as Array<{ type?: string; content?: string }>)[0];
+      return (
+        blk?.type === "tool_result" &&
+        typeof blk.content === "string" &&
+        blk.content.includes("COMPACTION STUB")
+      );
+    });
+    expect(stubbed).toBeDefined();
+    const stubText = (stubbed!.message as { content: Array<{ content: string }> }).content[0]
+      .content;
+    // Tool_use (ix=3 in the SOURCE) is what the stub should reference — that's what `ambix query` resolves.
+    expect(stubText).toMatch(/ambix query orig-sess 3/);
+  });
+
+  it("empty source — just emits a divider with preservedFirstIx past end", () => {
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: [],
+      fullRecent: 10,
+      uuidFn: makeUuidFn(),
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out[0].isCompactSummary).toBe(true);
+    expect(stats.sourceEntryCount).toBe(0);
+    expect(stats.condensedEntryCount).toBe(0);
+    expect(stats.preservedEntryCount).toBe(0);
+  });
+});
