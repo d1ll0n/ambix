@@ -32,6 +32,18 @@ ambix analyze <session-path-or-id>
 
 No additional flags. Output includes token totals, tool usage counts, file churn, bash clusters, failures, subagent records, and permission events.
 
+## info
+
+Minimal session summary: structural metadata plus a token rollup (totals + per-model). Cheaper than `analyze` — no tools/files/churn scan.
+
+```
+ambix info <session-path-or-id> [--json]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--json` | off | Emit `SessionInfo` JSON instead of the human-readable block |
+
 ## stage
 
 Stage a session into a tmp workspace. Prints `StageLayout` JSON to stdout.
@@ -60,6 +72,29 @@ ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]
 | `--output <file>` | stdout | Write to file instead of stdout |
 
 Each round, tool_use, and assistant text block is tagged with a rehydration index (the `ix` that `ambix query <session> show <ix>` resolves). An agent loading the brief output can pull full details for any entry on demand.
+
+## compact
+
+Emit a new resumable session JSONL with older turns condensed and the last N rounds preserved verbatim. Alternative to Claude Code's built-in `/compact`, which replaces prior history with a narrative summary in place; this produces a new resumable session file that preserves turn structure with rehydration pointers.
+
+```
+ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--full-recent N` | `10` | Rounds preserved verbatim at the tail |
+| `--output <path>` | `~/.claude/projects/<source-slug>/<new-uuid>.jsonl` | Destination path |
+| `--dry-run` | off | Print the plan and stats without writing |
+
+**Output layout:** the emitted file has three sections —
+1. Condensed pre-compaction turns: user/assistant/tool_use entries retained as real entries; each tool_result's `content` is replaced with `[COMPACTION STUB — <tool-summary>, ~N bytes removed. Retrieve via: ambix query <orig-session-id> <ix>]`.
+2. A single `isCompactSummary: true` user entry as the divider, explaining what's above and below.
+3. The last N rounds preserved verbatim.
+
+**Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary is printed to stderr.
+
+**Rehydration:** when Claude resumes into a compacted session and encounters a stub, it can run the embedded `ambix query` command to retrieve the original pre-compaction tool output. Empirically validated against Claude Code 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## file-at
 

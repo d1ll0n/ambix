@@ -36,13 +36,23 @@ ambix brief /path/to/session.jsonl
 
 This outputs a per-round XML summary where every tool call and assistant response is tagged with a rehydration index, so an agent can pull full details on demand via `ambix query`.
 
+Compact a session into a new resumable JSONL:
+
+```bash
+ambix compact /path/to/session.jsonl --full-recent 10
+```
+
+Emits a new session file with older turns retained structurally (tool_result bodies replaced by rehydration stubs that point at `ambix query`) and the last N rounds preserved verbatim. Claude Code's `/resume` picks up the compacted session in the source's project dir. Alternative to CC's built-in `/compact` when you want turn-by-turn navigability instead of a narrative summary.
+
 ### Subcommands
 
 | Command | Description |
 |---------|-------------|
 | `ambix distill <session>` | Full pipeline: stage, analyze, distill, merge, persist |
 | `ambix analyze <session>` | Deterministic analysis only (JSON to stdout) |
+| `ambix info <session>` | Minimal session summary (metadata + token rollup) |
 | `ambix brief <session>` | Chronological per-round summary for context recovery |
+| `ambix compact <session>` | Emit a resumable compacted JSONL (stubs + divider + preserved tail) |
 | `ambix stage <session>` | Stage a session into a tmp workspace |
 | `ambix file-at <path> <ix>` | Print a tracked file's content at a given turn index |
 | `ambix query <session> <sub>` | Search within a session log (tool-uses, tool-results, text-search, show) |

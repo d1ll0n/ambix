@@ -112,6 +112,24 @@ ambix brief /path/to/session.jsonl
 | Playwright tools | `<short_name>(key=value)` |
 | *(other)* | Generic fallback: tool name + first string/number field |
 
+## Compact
+
+Compact produces a resumable compacted session JSONL from an existing session — an alternative to Claude Code's built-in `/compact`. Where `/compact` replaces prior history with a narrative summary and continues in place, `ambix compact` spawns a *new* session file whose on-disk representation preserves the turn-by-turn structure of the original but trims bulk tool output.
+
+```bash
+ambix compact /path/to/session.jsonl --full-recent 10
+```
+
+**Output layout** — three sections in the emitted JSONL:
+
+1. **Condensed pre-compaction turns.** User/assistant entries pass through as real entries, but each `tool_result`'s `content` is swapped for a COMPACTION STUB string containing (a) a one-liner condenser summary (same one `ambix brief` uses), (b) the original byte count, and (c) an embedded `ambix query <orig-session-id> <ix>` command for rehydration.
+2. **`isCompactSummary` divider.** A single `user` entry with `isCompactSummary: true` + `isVisibleInTranscriptOnly: true`, positioned at the split point. Its content is prose describing what's above (condensed) and below (preserved), plus explicit instructions that stubs are placeholders, not real output.
+3. **Preserved verbatim turns.** The last `N` rounds (per `--full-recent N`, default 10) pass through unchanged — full tool_result bodies intact.
+
+The emitted file lives in the source session's CC project slug (`~/.claude/projects/<slug>/<new-uuid>.jsonl`) so it appears in `/resume` when the user is in that cwd. `parentUuid` is rebuilt as a linear chain through all emitted entries; `sessionId` on every entry is the fresh UUID.
+
+**Why this over `/compact`:** a resuming agent sees real user/assistant/tool_use/tool_result structure rather than narrative prose, so it can reason about turn boundaries and reach for `ambix query` to pull the exact historical content of any stubbed turn on demand. Validated end-to-end against CC 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
+
 ## Narrative schema
 
 The `Narrative` is the agent-produced core of the artifact. Each field carries a `refs` array of turn indices pointing back into the source session.
