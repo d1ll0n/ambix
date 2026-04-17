@@ -1,5 +1,5 @@
 // src/stage/file-history.ts
-import { access, copyFile, mkdir, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { LogEntry, Session } from "parse-cc";
 import { isFileHistorySnapshotEntry } from "parse-cc";
@@ -46,16 +46,17 @@ export async function stageFileHistory(
     const out: SnapshotsIndex["files"][number] = { path: filePath, versions: [] };
     for (const v of versions) {
       let blobRel: string | null = null;
-      const bytes: number | null = null;
+      let bytes: number | null = null;
       if (v.backupFileName) {
         const blobSrc = path.join(sessionFhDir, v.backupFileName);
+        const blobDest = path.join(destDir, "blobs", v.backupFileName);
         try {
           await access(blobSrc);
-          await copyFile(blobSrc, path.join(destDir, "blobs", v.backupFileName));
+          await copyFile(blobSrc, blobDest);
           blobRel = `blobs/${v.backupFileName}`;
-          // size is best-effort; skip if not needed for ergonomics
+          bytes = (await stat(blobDest)).size;
         } catch {
-          // missing blob — keep entry but with blob: null
+          // missing blob — keep entry but with blob: null, bytes: null
         }
       }
       out.versions.push({

@@ -83,8 +83,47 @@ describe("stageFileHistory", () => {
     expect(idx.files[0].versions[0].version).toBe(1);
     expect(idx.files[0].versions[0].blob).toBe("blobs/abc123@v1");
     expect(idx.files[0].versions[0].ix).toBe(1); // first snapshot is at ix=1
+    // bytes is populated from stat() on the copied blob
+    expect(idx.files[0].versions[0].bytes).toBe("version 1 content".length);
     expect(idx.files[0].versions[1].version).toBe(2);
     expect(idx.files[0].versions[1].ix).toBe(2);
+    expect(idx.files[0].versions[1].bytes).toBe("version 2 content".length);
+  });
+
+  it("records bytes=null when the source blob is missing", async () => {
+    // file-history source dir exists but does NOT contain the expected blob
+    const fhSrc = path.join(dir, "fh-source");
+    mkdirSync(path.join(fhSrc, "session-test"), { recursive: true });
+    // deliberately don't write the blob
+
+    const text = joinLines(
+      JSON.stringify({
+        type: "file-history-snapshot",
+        messageId: "msg_1",
+        snapshot: {
+          messageId: "msg_1",
+          timestamp: "2026-04-13T10:00:01Z",
+          trackedFileBackups: {
+            "src/foo.ts": {
+              backupFileName: "missing@v1",
+              version: 1,
+              backupTime: "2026-04-13T10:00:01Z",
+            },
+          },
+        },
+      })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    await session.messages();
+
+    const destDir = path.join(dir, "file-history");
+    await stageFileHistory(session, destDir, fhSrc);
+
+    const idx = JSON.parse(
+      readFileSync(path.join(destDir, "snapshots.json"), "utf8")
+    ) as SnapshotsIndex;
+    expect(idx.files[0].versions[0].blob).toBeNull();
+    expect(idx.files[0].versions[0].bytes).toBeNull();
   });
 
   it("does nothing when the session has no file-history entries", async () => {
