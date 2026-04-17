@@ -9,33 +9,14 @@ import {
   isUserEntry,
 } from "parse-cc";
 import { groupIntoRounds } from "../brief/rounds.js";
+import { PRESERVE_TOOLS } from "./preserve-tools.js";
 import { buildStub, measureToolResultBytes } from "./stub.js";
 import { buildSummaryEntry } from "./summary.js";
 import { truncateOversizedStrings } from "./truncate.js";
+import { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS } from "./tuning.js";
 import type { CompactSessionStats } from "./types.js";
 
-/** Default UTF-8 byte threshold for single-string-field truncation in condensed entries. */
-export const DEFAULT_MAX_FIELD_BYTES = 500;
-/** Default number of chars retained as a preview in front of the truncation marker. */
-export const DEFAULT_PREVIEW_CHARS = 100;
-
-/**
- * Tools whose tool_use inputs and tool_result bodies MUST pass through
- * verbatim, even in the condensed section.
- *
- * CC reconstructs its live task list at resume time from the Task*
- * tool_uses + tool_results in the history. Stubbing them blanks the
- * list. Payloads are tiny (~6KB total per session) so preserving has
- * no practical cost.
- */
-const PRESERVE_TOOLS = new Set([
-  "TaskCreate",
-  "TaskUpdate",
-  "TaskGet",
-  "TaskList",
-  "TaskOutput",
-  "TaskStop",
-]);
+export { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS };
 
 export interface EmitOptions {
   /** Source session's deduped entry stream. */
@@ -109,6 +90,8 @@ export function emit(opts: EmitOptions): EmitResult {
     stubbedToolResultCount: 0,
     truncatedInputFieldCount: 0,
     bytesSaved: 0,
+    // Bundled-mode-only counter; always 0 in structural mode.
+    bundledTurnCount: 0,
   };
 
   const emitted: Record<string, unknown>[] = [];

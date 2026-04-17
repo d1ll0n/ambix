@@ -65,7 +65,15 @@ describe("compactSession — integration (round-trip through parse-cc + info)", 
     );
 
     const output = path.join(dir, "compacted.jsonl");
-    const result = await compactSession(new Session(source), { fullRecent: 1, output });
+    // Structural mode: this test inspects the per-entry shape of tool_results
+    // (preserved round_2 keeps its body, condensed round_1 has a stub). Bundled
+    // mode collapses those into a single prose message — different contract,
+    // covered separately.
+    const result = await compactSession(new Session(source), {
+      mode: "structural",
+      fullRecent: 1,
+      output,
+    });
 
     // Stats sanity
     expect(result.stats.sourceEntryCount).toBe(8);

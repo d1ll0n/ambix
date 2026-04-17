@@ -1,8 +1,26 @@
 // src/compact-session/types.ts
 import type { LogEntry } from "parse-cc";
 
+/**
+ * How the condensed (pre-preserved-tail) section is represented.
+ *
+ * - `bundled` — everything collapses into ONE user-role message containing
+ *   an `<ambix-compaction-marker>` preamble plus an XML list of per-turn
+ *   summaries. Tiny, simpler for the agent, but loses per-entry structural
+ *   fidelity. Task* entries still pass through as real entries so CC can
+ *   rebuild its live task list on resume. Default.
+ *
+ * - `structural` — every condensed entry remains a real log entry with its
+ *   role preserved; tool_result bodies are swapped for rehydration stubs
+ *   and oversized string fields are truncated. Bigger but keeps the
+ *   transcript parseable by downstream tooling.
+ */
+export type CompactMode = "bundled" | "structural";
+
 /** Options for `compactSession`. */
 export interface CompactSessionOptions {
+  /** Render mode. Default: `"bundled"`. */
+  mode?: CompactMode;
   /**
    * Preserve the last N rounds verbatim (full tool_result bodies). Older
    * turns are condensed — their tool_result `content` fields are replaced
@@ -79,6 +97,12 @@ export interface CompactSessionStats {
    * fields in unknown-shape tools).
    */
   truncatedInputFieldCount: number;
+  /**
+   * Bundled-mode only: source entries collapsed into the single bundled
+   * user-message summary (i.e. everything that wasn't preserved, dropped,
+   * or passed through as a Task* entry). Always 0 in structural mode.
+   */
+  bundledTurnCount: number;
   /**
    * Rough bytes removed (sum of original content sizes minus replacement
    * sizes, across tool_result stubs and tool_use input truncations).

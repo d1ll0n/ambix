@@ -95,7 +95,7 @@ describe("compactSession", () => {
     expect(result.destPath).toMatch(/\/\.claude\/projects\/-specific-test-cwd\/[0-9a-f-]+\.jsonl$/);
   });
 
-  it("carries the condensed/preserved split described by --fullRecent into stats", async () => {
+  it("structural mode: carries the condensed/preserved split described by --fullRecent into stats", async () => {
     const source = writeFixture(
       dir,
       "source.jsonl",
@@ -111,6 +111,7 @@ describe("compactSession", () => {
     const output = path.join(dir, "compacted.jsonl");
 
     const result = await compactSession(new Session(source), {
+      mode: "structural",
       fullRecent: 1,
       output,
       tasksBaseDir,
