@@ -5,7 +5,11 @@ import { isAssistantEntry, isToolResultBlock, isToolUseBlock, isUserEntry } from
 import { groupIntoRounds } from "../brief/rounds.js";
 import { buildStub, measureToolResultBytes } from "./stub.js";
 import { buildSummaryEntry } from "./summary.js";
+import { truncateOversizedStrings } from "./truncate.js";
 import type { CompactSessionStats } from "./types.js";
+
+/** Max UTF-8 bytes for any single string field inside a condensed tool_use.input. */
+const CONDENSED_INPUT_MAX_FIELD_BYTES = 500;
 
 export interface EmitOptions {
   /** Source session's deduped entry stream. */
@@ -72,6 +76,7 @@ export function emit(opts: EmitOptions): EmitResult {
     condensedEntryCount: 0,
     preservedEntryCount: 0,
     stubbedToolResultCount: 0,
+    truncatedInputFieldCount: 0,
     bytesSaved: 0,
   };
 
@@ -195,6 +200,16 @@ function rewriteEntry(opts: RewriteOpts): { entry: Record<string, unknown>; hasU
     );
   }
 
+  if (opts.condense && isAssistantEntry(opts.source)) {
+    truncateOversizedToolUseInputs(
+      cloned,
+      opts.sourceIx,
+      opts.origSessionId,
+      opts.ambixCmd,
+      opts.stats
+    );
+  }
+
   return { entry: cloned, hasUuid };
 }
 
@@ -214,6 +229,42 @@ function regenerateRoutingIds(cloned: Record<string, unknown>, uuidFn: () => str
     if (typeof m.id === "string") {
       m.id = `msg_${uuidFn().replaceAll("-", "").slice(0, 22)}`;
     }
+  }
+}
+
+/**
+ * Walk a condensed assistant entry's content blocks and truncate any oversized
+ * string fields inside tool_use.input. Defends against large payloads in
+ * Edit (old_string / new_string), Write (content), and any unknown-shape tool
+ * that stuffs multi-KB strings into its input. The truncation marker cites
+ * `ambix query <sid> <sourceIx>` so the agent can rehydrate the whole
+ * assistant entry if it needs the original input.
+ */
+function truncateOversizedToolUseInputs(
+  cloned: Record<string, unknown>,
+  sourceIx: number,
+  origSessionId: string,
+  ambixCmd: string | undefined,
+  stats: CompactSessionStats
+): void {
+  const msg = cloned.message as { content: unknown };
+  const content = msg.content;
+  if (!Array.isArray(content)) return;
+  const cmd = ambixCmd ?? "ambix query";
+  const marker = `[COMPACTION STUB — field truncated. Retrieve full entry via: ${cmd} ${origSessionId} ${sourceIx}]`;
+  for (const blk of content) {
+    if (!blk || typeof blk !== "object") continue;
+    const b = blk as Record<string, unknown>;
+    if (b.type !== "tool_use") continue;
+    if (b.input === undefined || b.input === null) continue;
+    const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
+    b.input = truncateOversizedStrings(
+      b.input,
+      { maxFieldBytes: CONDENSED_INPUT_MAX_FIELD_BYTES, marker },
+      subStats
+    );
+    stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
+    stats.bytesSaved += subStats.bytesSaved;
   }
 }
 

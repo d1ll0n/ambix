@@ -57,8 +57,15 @@ export interface CompactSessionStats {
   /** Number of tool_result bodies replaced with stubs in the condensed section. */
   stubbedToolResultCount: number;
   /**
-   * Rough bytes removed (sum of original tool_result content sizes minus
-   * stub sizes). Positive = savings.
+   * Number of oversized string fields truncated inside condensed assistant
+   * entries' tool_use inputs (Edit old/new_string, Write content, arbitrary
+   * fields in unknown-shape tools).
+   */
+  truncatedInputFieldCount: number;
+  /**
+   * Rough bytes removed (sum of original content sizes minus replacement
+   * sizes, across tool_result stubs and tool_use input truncations).
+   * Positive = savings.
    */
   bytesSaved: number;
 }

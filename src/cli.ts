@@ -411,7 +411,8 @@ async function runCompact(args: string[]): Promise<number> {
       `(${result.stats.sourceEntryCount} source entries → ` +
       `${result.stats.condensedEntryCount} condensed + ` +
       `${result.stats.preservedEntryCount} preserved, ` +
-      `${result.stats.stubbedToolResultCount} stubs, ` +
+      `${result.stats.stubbedToolResultCount} tool_result stubs, ` +
+      `${result.stats.truncatedInputFieldCount} tool_use fields truncated, ` +
       `~${result.stats.bytesSaved} bytes saved)`
   );
   if (result.copiedTasksDir) {

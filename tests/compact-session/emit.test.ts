@@ -314,6 +314,71 @@ describe("emit", () => {
     }
   });
 
+  it("truncates oversized string fields inside condensed tool_use.input (Edit old_string, etc.)", async () => {
+    const bigOld = "x".repeat(2000);
+    const bigNew = "y".repeat(2000);
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "edit a file", uuid: "u1" }),
+        toolUseAssistantLine({
+          name: "Edit",
+          input: { file_path: "/tmp/f.ts", old_string: bigOld, new_string: bigNew },
+          toolUseId: "tu_E",
+          uuid: "a1",
+        }),
+        toolResultUserLine({ toolUseId: "tu_E", content: "ok", uuid: "r1" }),
+        // Round 2 — preserved, big strings must NOT be truncated here
+        userLine({ text: "edit again", uuid: "u2" }),
+        toolUseAssistantLine({
+          name: "Edit",
+          input: {
+            file_path: "/tmp/g.ts",
+            old_string: "z".repeat(2000),
+            new_string: "q".repeat(2000),
+          },
+          toolUseId: "tu_E2",
+          uuid: "a2",
+        }),
+        toolResultUserLine({ toolUseId: "tu_E2", content: "ok", uuid: "r2" })
+      )
+    );
+
+    const { entries: out, stats } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 1,
+      uuidFn: makeUuidFn(),
+    });
+
+    // Condensed round's tool_use input — big fields truncated, small ones kept
+    const condensedAsst = out[1] as Record<string, unknown>;
+    const condensedInput = (
+      condensedAsst.message as { content: Array<{ input?: Record<string, unknown> }> }
+    ).content[0].input!;
+    expect(condensedInput.file_path).toBe("/tmp/f.ts"); // short: preserved
+    expect(condensedInput.old_string).toMatch(/COMPACTION STUB/);
+    expect(condensedInput.new_string).toMatch(/COMPACTION STUB/);
+    expect(String(condensedInput.old_string)).toContain("ambix query");
+
+    // Preserved round's tool_use input — big fields passed through verbatim
+    const preservedAsst = out.find((e, i) => {
+      if (i < 3) return false;
+      const msg = (e as { message?: { content?: unknown } }).message;
+      if (!msg?.content || !Array.isArray(msg.content)) return false;
+      const b = (msg.content as Array<{ type?: string; input?: Record<string, unknown> }>)[0];
+      return b?.type === "tool_use" && b?.input?.file_path === "/tmp/g.ts";
+    });
+    expect(preservedAsst).toBeDefined();
+    const preservedInput = (
+      preservedAsst!.message as { content: Array<{ input: Record<string, unknown> }> }
+    ).content[0].input;
+    expect(preservedInput.old_string).toBe("z".repeat(2000));
+    expect(preservedInput.new_string).toBe("q".repeat(2000));
+
+    expect(stats.truncatedInputFieldCount).toBe(2); // condensed old_string + new_string
+    expect(stats.bytesSaved).toBeGreaterThan(3000); // roughly 2×2000 bytes minus marker overhead
+  });
+
   it("empty source — just emits a divider with preservedFirstIx past end", () => {
     const { entries: out, stats } = emit({
       ...baseEmit,
