@@ -22,7 +22,7 @@ Validated via two throwaway /resume tests on 2026-04-17 (see §Validation). Clau
 ## Non-goals
 
 - Replacing CC's native `/compact` in-place behavior. This feature is additive and spawns a new session; it does not mutate the source.
-- Copying read-only sidecar state (subagent logs, spill files, file-history blobs). Rehydration goes back to the original session's copies. **Exception:** the per-session tasks directory (`~/.claude/tasks/<sessionId>/`) is *deep-copied* from the source to the new session — tasks are live state the harness mutates via `TaskCreate` / `TaskUpdate`, and a fresh UUID with no matching dir would drop reminders and break the task lifecycle. Copying (not symlinking) keeps the two sessions independent, so the source can still be forked or continued without state entanglement.
+- Copying read-only sidecar state (subagent logs, spill files, file-history blobs). Rehydration goes back to the original session's copies. Tasks are handled separately — see "Tasks sidecar snapshot" below.
 - Narrative distillation. That's `ambix distill`.
 - Path rewriting for cross-project relocation. That's a separate feature (parse-cc's `relocate`, parked in backlog).
 
@@ -85,7 +85,7 @@ For user entries containing `tool_result` blocks, replace each block's `content`
  Retrieve via: ambix query {orig-session-id} {ix}]
 ```
 
-Where `{condenser-summary}` comes from `src/compact/condensers.ts::condenseToolUse(name, input, originalResult)`. That function already handles Read/Edit/Write/Grep/Glob/Bash/Task/TodoWrite/Playwright + falls back to `condenseGeneric(name, input, result)` for unknown tools (prints `{toolName} {firstScalarKey}=val [error?]`).
+Where `{condenser-summary}` comes from `src/brief/condensers.ts::condenseToolUse(name, input, originalResult)`. That function already handles Read/Edit/Write/Grep/Glob/Bash/Task/TodoWrite/Playwright + falls back to `condenseGeneric(name, input, result)` for unknown tools (prints `{toolName} {firstScalarKey}=val [error?]`).
 
 Examples:
 - Read: `[COMPACTION STUB — Read src/foo.ts (offset=0, limit=50) — 50 lines, ~2k tok, 2048 bytes removed. Retrieve via: ambix query <id> 47]`
@@ -144,9 +144,19 @@ Default:
 
 Same slug as the source → the compacted session appears in CC's `/resume` list alongside the source when the user is in that cwd.
 
+## Tasks sidecar snapshot
+
+Claude Code keys per-session task state by session UUID, storing files under `~/.claude/tasks/<sessionId>/` (one `<id>.json` per task plus a `.highwatermark` counter). Tasks are live state the harness mutates at runtime via `TaskCreate` / `TaskUpdate`; a session with no matching tasks directory has no visible tasks.
+
+When `ambix compact` emits a new session UUID, it deep-copies the source's tasks directory to `~/.claude/tasks/<new-session-id>/` so the compacted session starts with the source's task state intact. The copy is independent — subsequent task mutations on either the source or the compacted session affect only that side's directory. This keeps the source fully available for continued use or forking.
+
+No-op when the source has no tasks directory. The copy is skipped in `--dry-run` mode.
+
+**Uniqueness guarantee.** `compactSession` generates a fresh session UUID and verifies that both its derived JSONL path and its tasks directory are unoccupied before using it, re-rolling if either collides. An explicit `--output` pointing at a pre-existing file is an error — the command refuses to overwrite it.
+
 ## Round boundaries (for `--full-recent N`)
 
-A "round" starts at each top-level user entry that is NOT a tool_result wrapper (`isMeta !== true`). The round extends through all subsequent assistant turns and tool_result user entries until the next top-level user turn or end-of-session. This matches `src/compact/rounds.ts`'s existing `computeRounds` logic — reuse it directly.
+A "round" starts at each top-level user entry that is NOT a tool_result wrapper (`isMeta !== true`). The round extends through all subsequent assistant turns and tool_result user entries until the next top-level user turn or end-of-session. This matches `src/brief/rounds.ts`'s existing `groupIntoRounds` logic — reuse it directly.
 
 `--full-recent N` means: take the last N rounds in the source. Everything earlier is condensed. If source has fewer than N rounds, everything is preserved (no condensed section emitted).
 
@@ -171,13 +181,16 @@ src/compact-session/
   emit.ts            — JSONL writer; parentUuid chain rebuild
   stub.ts            — stub-text builder (wraps condenseToolUse)
   summary.ts         — divider entry constructor + content template
+  tasks.ts           — deep-copy the source's tasks sidecar to the new session
   types.ts           — CompactSessionOptions, CompactSessionResult
 src/cli.ts           — add `compact` subcommand dispatcher (rename existing → `brief`)
 ```
 
-Shared helpers lifted from `src/compact/`:
-- `rounds.ts::computeRounds` + `buildToolResultIndex`
+Shared helpers lifted from `src/brief/`:
+- `rounds.ts::groupIntoRounds` + `buildToolResultIndex`
 - `condensers.ts::condenseToolUse`
+
+From parse-cc: `defaultTasksDir` + `findTasksDir` for locating the source's tasks directory.
 
 ## Validation strategy
 
