@@ -402,9 +402,9 @@ function buildBundledContent(args: {
   ];
   if (args.preservedFirstIx > 0) {
     preamble.push(
-      `Turns 0–${args.preservedFirstIx - 1} were condensed into the <turns> block below.`,
-      `Each <turn ix="N"> summarizes ONE source entry — retrieve the original via:`,
-      `    ${args.ambixCmd} ${args.origSessionId} <ix>`,
+      `Turns 0–${args.preservedFirstIx - 1} were condensed into the \`<turns>\` block below.`,
+      `Each \`<turn ix="N">\` summarizes ONE source entry. To retrieve the original content`,
+      `of turn N, run: \`${args.ambixCmd} ${args.origSessionId} N\` (substitute the ix).`,
       ""
     );
   }
