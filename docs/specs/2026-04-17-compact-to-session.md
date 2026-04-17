@@ -1,8 +1,8 @@
 # Spec: `ambix compact` — compacted session JSONL
 
-**Status:** spec (pre-implementation)
+**Status:** shipped (bundled + structural modes)
 **Date:** 2026-04-17
-**Supersedes:** the existing `ambix compact` subcommand, which will be renamed to `ambix brief` (or removed — see §Rollout).
+**Supersedes:** the existing `ambix compact` subcommand, which was renamed to `ambix brief`.
 
 ## Motivation
 
@@ -11,13 +11,24 @@ Claude Code's `/compact` produces a narrative text summary and continues the ori
 1. It erases structural information. The summary is prose; the agent loses turn-by-turn pointers to "what was the exact Bash output at turn 47?"
 2. It can't be inspected without opening the original session.
 
-This feature produces an alternative: a **new, resumable session** whose on-disk representation preserves the structural history of the original but strips bulk tool output, leaving navigable rehydration pointers in place. The agent resuming the compacted session sees a real user/assistant/tool_use/tool_result transcript structure; for any truncated turn, it can run `ambix query <orig-session> <ix>` to retrieve the original content.
+This feature produces an alternative: a **new, resumable session** where the condensed range is replaced with lightweight summary content that keeps navigable rehydration pointers to the source session.
+
+### What shipped
+
+The design process surfaced that there are two reasonable representations of the condensed range, each with genuine tradeoffs. Both are implemented; one is the default.
+
+- **`--mode bundled` (default).** All condensed entries collapse into a single user-role message containing an `<ambix-compaction-marker>` preamble + a `<turns>` XML list of per-entry summaries. Simplest for the resumed agent, smallest on disk (~3-10% of source), structurally immune to unknown-tool bloat. Task* entries still pass through as real entries.
+- **`--mode structural`.** Every condensed entry stays as a real log entry with its role preserved; tool_result bodies become `[COMPACTION STUB — …]` strings; oversized tool_use input fields are truncated with a preview + rehydration marker. Larger on disk (~25-30% of source) but keeps per-entry structure for downstream tooling that walks the transcript.
+
+Both modes share: preserved tail verbatim (`--full-recent N`), Task* tool_use/result pass-through so CC replay rebuilds the live task list, file-history-snapshot drop, tasks-dir snapshot copy, parentUuid chain linearization, routing-ID regeneration.
+
+The rest of this doc walks through the design in detail. Most of it applies to both modes; sections that are mode-specific are marked.
 
 Validated via two throwaway /resume tests on 2026-04-17 (see §Validation). Claude Code's loader accepts the shape; Claude recognizes stubs as truncation markers; proactive rehydration works.
 
 ## Goal
 
-> Given a source session, emit a new session JSONL at `~/.claude/projects/<same-slug>/<new-uuid>.jsonl` containing three sections: condensed pre-compaction turns with stubbed tool_result bodies, an `isCompactSummary` divider entry at the split point, and the last N rounds preserved verbatim. The new session is immediately usable via CC's `/resume`.
+> Given a source session, emit a new session JSONL at `~/.claude/projects/<same-slug>/<new-uuid>.jsonl` containing (bundled mode) a single compaction-summary user-message + Task* pass-throughs + preserved tail, or (structural mode) per-entry condensed records + divider + preserved tail. The new session is immediately usable via CC's `/resume`.
 
 ## Non-goals
 
@@ -50,16 +61,32 @@ Alternative: remove the existing `compact` entirely if no downstream users depen
 
 ### File layout
 
+**Structural mode:**
+
 ```
 [condensed entries — turns 0..N-k]        ← user/assistant/tool_use entries pass through;
-                                             tool_result content replaced with stub strings
-[isCompactSummary divider — 1 entry]      ← user entry with isCompactSummary=true,
-                                             content = prose explaining the compaction
+                                             tool_result bodies → COMPACTION STUB strings;
+                                             oversized tool_use inputs truncated with preview
+[divider — 1 entry]                       ← user entry wrapped in
+                                             <ambix-compaction-marker>…</ambix-compaction-marker>
 [preserved entries — turns N-k+1..N]      ← all content passed through verbatim
 ```
 
-Empty condensed section (all turns within `--full-recent` window): skip emitting condensed entries, still emit divider + preserved.
-Empty preserved section (`--full-recent 0`): skip divider? **Decision: still emit the divider** so the agent always has the explanatory preamble. It can be at end-of-file.
+**Bundled mode:**
+
+```
+[bundled summary — 1 user entry]          ← <ambix-compaction-marker> preamble +
+                                             <turns> XML list (one <turn ix="N" kind="..."
+                                             name="...">…</turn> per condensed source entry)
+[Task* pass-throughs — 0..M entries]      ← TaskCreate/TaskUpdate/etc. tool_use + matched
+                                             tool_result entries preserved VERBATIM (CC
+                                             replays these on resume to rebuild task state)
+[preserved entries — turns N-k+1..N]      ← all content passed through verbatim
+```
+
+Both modes drop `file-history-snapshot` entries from the condensed range (CC never feeds them to the model; they commonly add 8+ KB apiece).
+
+Empty condensed section (all turns within `--full-recent` window): skip turns/condensed content, still emit the summary entry + preserved. Empty preserved section (`--full-recent 0`): still emit summary so the agent always has the explanatory preamble.
 
 ### Entry-level contract
 
@@ -96,7 +123,9 @@ Examples:
 
 **Note on `ix`:** this is the SOURCE session's 0-indexed turn number, not the new session's. That's what `ambix query` takes.
 
-### isCompactSummary divider
+### Divider / summary entry
+
+> **Implementation note (2026-04-17):** the original spec below proposed a user entry carrying `isCompactSummary: true` + `isVisibleInTranscriptOnly: true`. Both flags caused CC to *hide* the content from the resuming agent — on real smoke tests the divider prose never made it into the model's context. The flags were removed; the shipped entry is a plain user-role message whose content is wrapped in `<ambix-compaction-marker>…</ambix-compaction-marker>` tags (so downstream tools can still identify it) and nothing else. In bundled mode this same user message also carries the `<turns>` list.
 
 ```json
 {
@@ -105,11 +134,9 @@ Examples:
   "uuid": "<fresh>",
   "sessionId": "<new session UUID>",
   "timestamp": "<now>",
-  "isCompactSummary": true,
-  "isVisibleInTranscriptOnly": true,
-  "message": { "role": "user", "content": "<prose — see template below>" },
+  "message": { "role": "user", "content": "<ambix-compaction-marker>\n<prose — see template below>\n</ambix-compaction-marker>\n<turns>...</turns>" },
   "userType": "external",
-  "entrypoint": "cli",
+  "isMeta": false,
   "cwd": "<source cwd>",
   "gitBranch": "<source branch>",
   "version": "<source version>",
@@ -199,7 +226,7 @@ From parse-cc: `defaultTasksDir` + `findTasksDir` for locating the source's task
 - Preserved tool_result content passes through unchanged
 - parentUuid chain is linear and consistent (first = null, each subsequent = prev.uuid)
 - sessionId on every entry = new UUID
-- Divider carries `isCompactSummary: true` and `isVisibleInTranscriptOnly: true`
+- Summary entry's content wraps prose in `<ambix-compaction-marker>` tags (no `isCompactSummary`/`isVisibleInTranscriptOnly` flags — they make CC hide the content)
 - `--full-recent 0` = everything condensed, divider at end
 - `--full-recent ∞` (larger than turn count) = everything preserved, divider at start
 - Fresh UUID differs from source on every run
@@ -216,23 +243,27 @@ From parse-cc: `defaultTasksDir` + `findTasksDir` for locating the source's task
 
 ## Rollout
 
-1. **Decide on rename-vs-remove for existing `compact`.** If unused locally, remove. Otherwise rename to `brief` in a separate commit so the rename is isolated from the new feature.
-2. **Implement** per §Implementation shape with tests. Single PR.
-3. **Ship + dogfood** — compact a few real sessions, manually verify `/resume` UX.
-4. **A/B test**: run structural-split (this design) vs a bundled-prose variant (everything inside the divider's content body, no separate condensed entries) and compare agent quality on controlled probes. Structural-split is the baseline because a transcript of real entries gives the agent explicit turn boundaries, tool_use/tool_result pairing, and parent/child relationships to reason about, whereas a flat prose list collapses that into text. Measure before generalizing.
+1. ✅ **Rename existing `compact` → `brief`** in a separate commit so the rename is isolated from the new feature.
+2. ✅ **Structural-mode implementation** — condensed range keeps real entries with stubbed tool_results + size-swept oversized fields.
+3. ✅ **Task* preserve allowlist** — `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` pass through verbatim regardless of mode so CC can rebuild its live task list on resume.
+4. ✅ **Bundled-mode implementation** — single user-role message carries the condensed summary; default mode.
+5. ✅ **`--mode bundled|structural` CLI flag.**
+6. **In progress: dogfood.** Compact real sessions, manually verify `/resume` UX, report file-size compaction ratios. First real-session run (492 KB → 18.7 KB bundled / 137 KB structural) on 2026-04-17.
+7. **Pending: A/B quality comparison.** Bundled is the default on a priori reasoning (simpler, shape-immune, smaller) but the quality tradeoff vs. structural has not been measured with controlled agent probes. Open-ended; use bundled as the baseline since it ships as default.
 
 ## Open questions / follow-ups
 
-- **Stub density limits:** at what stub count does Claude lose structural fidelity? Probably fine at <200, unknown beyond. Measure during dogfooding.
-- **Multi-compaction sessions:** if a session was already CC-compacted once and we re-compact it, does the resumed agent handle two `isCompactSummary` entries cleanly? Almost certainly yes (parse-cc's compaction detector walks all of them), but verify.
-- **`ambix info` awareness:** annotate output when `isCompactSummary` entries are present in the target. Out of scope here, file separately.
-- **Previewed-not-stubbed tool_results:** for specific tool types (e.g., small text outputs < 500 bytes), maybe inline the original content instead of stubbing. Defer until after A/B test shows structural-split is the right baseline.
+- **Mixed-block Task* entries (concern).** An entry that carries a `Task*` block *alongside* a non-Task tool_use/result currently passes through whole (we can't cleanly split a single entry across the bundle boundary without breaking CC's parentUuid chain). Tracked via `stats.mixedPreservedEntryCount` so we can detect if it's a real bloat source in practice. Fix path: split at block granularity and emit the Task* slice as its own synthetic entry.
+- **Stub density limits:** at what stub count does Claude lose structural fidelity? Probably fine at <200, unknown beyond. Measure during dogfooding — primarily relevant for structural mode.
+- **Multi-compaction sessions:** if a session was already CC-compacted once and we re-compact it, does the resumed agent handle the nested context cleanly? Verify.
+- **`ambix info` awareness:** annotate output when the target session is compacted. Out of scope here, file separately.
+- **Task* ordering guarantees:** bundled mode emits Task* entries immediately after the bundled message and before the preserved tail. They're in source-chronological order among themselves, so CC's replay reaches the correct final state. If CC ever starts caring about tool_use/result *interleaving* with non-Task turns for replay (currently it doesn't), the design needs revisiting.
 
 ## Validation log (from 2026-04-17 throwaway tests)
 
 Two reproduction runs against CC 2.1.110 with synthetic compacted JSONLs confirmed:
 
-1. **CC accepts the shape** — new UUID, fresh slug, multi-entry JSONL with `isCompactSummary` + mixed entry types — no loader errors, session appears in `/resume` list.
+1. **CC accepts the shape** — new UUID, fresh slug, multi-entry JSONL with mixed entry types — no loader errors, session appears in `/resume` list. (An earlier throwaway using `isCompactSummary: true` + `isVisibleInTranscriptOnly: true` DID load, but caused CC to hide the divider content from the model; removing the flags fixed it — now the summary entry is plain user text wrapped in `<ambix-compaction-marker>` tags.)
 2. **Divider at split point is correct placement** — CC does NOT truncate at the divider; pre-divider entries remain in the model's context. Claude describes stubbed entries by turn and correctly reasons about their structure.
 3. **Stub recognition** — Claude explicitly identifies stubs as truncation markers, does not hallucinate content, quotes the `ambix query` command from the stub verbatim when asked to rehydrate.
 4. **Proactive rehydration** — when the user cannot re-derive the content (e.g., file path has no real underlying file), Claude runs `ambix query` unprompted. When both re-derivation and rehydration are valid, Claude presents both options.

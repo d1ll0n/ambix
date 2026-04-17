@@ -114,23 +114,27 @@ ambix brief /path/to/session.jsonl
 
 ## Compact
 
-Compact produces a resumable compacted session JSONL from an existing session — an alternative to Claude Code's built-in `/compact`. Where `/compact` replaces prior history with a narrative summary and continues in place, `ambix compact` spawns a *new* session file whose on-disk representation preserves the turn-by-turn structure of the original but trims bulk tool output.
+Compact produces a resumable compacted session JSONL from an existing session — an alternative to Claude Code's built-in `/compact`. Where `/compact` replaces prior history with a narrative summary and continues in place, `ambix compact` spawns a *new* session file with the same `cwd` / project slug so CC picks it up in `/resume`, and its on-disk layout trades bulk tool output for rehydration pointers.
 
 ```bash
 ambix compact /path/to/session.jsonl --full-recent 10
 ```
 
-**Output layout** — three sections in the emitted JSONL:
+**Two render modes** for the condensed range (controlled by `--mode`; common tail is identical either way):
 
-1. **Condensed pre-compaction turns.** User/assistant entries pass through as real entries, but each `tool_result`'s `content` is swapped for a COMPACTION STUB string containing (a) a one-liner condenser summary (same one `ambix brief` uses), (b) the original byte count, and (c) an embedded `ambix query <orig-session-id> <ix>` command for rehydration.
-2. **`isCompactSummary` divider.** A single `user` entry with `isCompactSummary: true` + `isVisibleInTranscriptOnly: true`, positioned at the split point. Its content is prose describing what's above (condensed) and below (preserved), plus explicit instructions that stubs are placeholders, not real output.
-3. **Preserved verbatim turns.** The last `N` rounds (per `--full-recent N`, default 10) pass through unchanged — full tool_result bodies intact.
+- **Bundled (default).** Every condensed source entry collapses into a *single* user-role message. Its content is an `<ambix-compaction-marker>` preamble plus a `<turns>` XML block: one `<turn ix="N" kind="..." name="...">…</turn>` per entry, with a condenser one-liner for tool_use / tool_result and the original text verbatim for user/assistant turns (with a `<truncated>{preview}…</truncated>` fallback when a single text field exceeds the byte threshold). Because the renderer walks every field by size, shape-specific bloat from unknown tools can't leak. Typical compaction: ~3-10% of source size.
 
-The emitted file lives in the source session's CC project slug (`~/.claude/projects/<slug>/<new-uuid>.jsonl`) so it appears in `/resume` when the user is in that cwd. `parentUuid` is rebuilt as a linear chain through all emitted entries; `sessionId` on every entry is the fresh UUID.
+- **Structural.** Every condensed entry stays as a real log entry. `tool_result` bodies are replaced with `[COMPACTION STUB — {tool-summary}, ~N bytes removed. Retrieve via: ambix query <orig-session-id> <ix>]`; oversized tool_use input fields (Edit `old_string`/`new_string`, Write `content`, arbitrary MCP payloads) are truncated with a preview + rehydration marker. Larger on disk (~25-30% of source) but preserves per-entry fidelity for anything that walks the transcript downstream.
+
+**Common tail** across both modes: the last `--full-recent N` rounds pass through verbatim as real entries with full tool_result bodies intact. `file-history-snapshot` bookkeeping entries are dropped in the condensed range (CC never feeds them to the model on resume, and they commonly add 8+ KB apiece).
+
+**Task sidecar pass-through.** `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_uses and their matched tool_results pass through *verbatim as real entries*, regardless of mode — CC reconstructs its live task list on resume by replaying those calls. Redacting them would leave the resumed session with an empty task list. In bundled mode these entries sit between the bundled message and the preserved tail; they're ordered chronologically among themselves so CC's replay lands on the correct final state.
+
+**Chain + sessionId.** The emitted file lives at `~/.claude/projects/<source-slug>/<new-uuid>.jsonl`. `parentUuid` is rebuilt as a linear chain through every emitted entry; `sessionId`, `promptId`, `requestId`, and `message.id` are all regenerated fresh — leaving any source-session routing IDs in place makes CC treat the compacted entries as duplicates and skip them when assembling resume context.
 
 **Tasks sidecar snapshot.** CC keys per-session task state by session UUID (`~/.claude/tasks/<sessionId>/`). A fresh UUID by itself has no matching tasks dir, so `TaskCreate`/`TaskUpdate` reminders from the source would be lost. `ambix compact` deep-copies the source's tasks dir to the new session's, so the compacted session inherits the task state at compaction time. The two sessions are independent from that point on: subsequent task mutations on one side don't leak to the other, which matters if the source is later forked or continued.
 
-**Why this over `/compact`:** a resuming agent sees real user/assistant/tool_use/tool_result structure rather than narrative prose, so it can reason about turn boundaries and reach for `ambix query` to pull the exact historical content of any stubbed turn on demand. Validated end-to-end against CC 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
+**Why this over `/compact`:** a resuming agent either (bundled) reads a compact structured summary with explicit rehydration commands or (structural) sees real user/assistant/tool_use/tool_result structure, so it can reason about turn boundaries and reach for `ambix query` to pull the exact historical content of any stubbed turn on demand. Validated end-to-end against CC 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## Narrative schema
 

@@ -75,28 +75,35 @@ Each round, tool_use, and assistant text block is tagged with a rehydration inde
 
 ## compact
 
-Emit a new resumable session JSONL with older turns condensed and the last N rounds preserved verbatim. Alternative to Claude Code's built-in `/compact`, which replaces prior history with a narrative summary in place; this produces a new resumable session file that preserves turn structure with rehydration pointers.
+Emit a new resumable session JSONL with older turns condensed and the last N rounds preserved verbatim. Alternative to Claude Code's built-in `/compact`, which replaces prior history with a narrative summary in place; this produces a new resumable session file with rehydration pointers.
 
 ```
-ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]
+ambix compact <session-path-or-id> [--mode bundled|structural] [--full-recent N]
+                                   [--max-field-bytes N] [--preview-chars N]
+                                   [--output <path>] [--dry-run]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--mode <bundled\|structural>` | `bundled` | Render layout for the condensed range (see below) |
 | `--full-recent N` | `10` | Rounds preserved verbatim at the tail |
+| `--max-field-bytes N` | `500` | Truncate any condensed string field above this UTF-8 byte count |
+| `--preview-chars N` | `100` | Chars of the original kept as preview inside the truncation marker (`0` disables the preview) |
 | `--output <path>` | `~/.claude/projects/<source-slug>/<new-uuid>.jsonl` | Destination path |
 | `--dry-run` | off | Print the plan and stats without writing |
 
-**Output layout:** the emitted file has three sections —
-1. Condensed pre-compaction turns: user/assistant/tool_use entries retained as real entries; each tool_result's `content` is replaced with `[COMPACTION STUB — <tool-summary>, ~N bytes removed. Retrieve via: ambix query <orig-session-id> <ix>]`.
-2. A single `isCompactSummary: true` user entry as the divider, explaining what's above and below.
-3. The last N rounds preserved verbatim.
+**Modes.** The two render modes differ only in how the *condensed* range (everything older than `--full-recent N` rounds) is represented on disk. Both use the same preserved tail and the same Task* sidecar handling.
 
-**Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary is printed to stderr.
+- **`bundled` (default)** — all condensed turns collapse into ONE user-role message whose body is a `<ambix-compaction-marker>` preamble followed by `<turns>` XML containing one `<turn ix="N" kind="..." name="...">…</turn>` per condensed entry (condenser one-liner for tool_use / tool_result, text verbatim with size-capped fallback for user/assistant). Smallest output; the prose renderer sees every field, so unknown-tool payloads can't leak. Pick this unless you have a specific reason to want real per-entry records.
+- **`structural`** — every condensed entry stays as a real log entry with its role preserved; tool_result bodies are swapped for `[COMPACTION STUB — …]` strings that reference `ambix query <orig-session-id> <ix>`; oversized tool_use input fields (Edit `old_string`/`new_string`, Write `content`, MCP payloads, etc.) are truncated with a `<truncated>…</truncated>` preview and the same rehydration marker. Per-entry fidelity makes the output easier for downstream tooling to walk.
+
+**Preserved tail + Task* sidecar.** In both modes the last `--full-recent N` source rounds are emitted verbatim, and `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_uses + their matched tool_results pass through verbatim regardless of mode. CC replays these on resume to rebuild its live task list; redacting them would break task-state restoration. In bundled mode the preserved Task* entries sit between the bundled summary message and the preserved tail.
+
+**Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary (counts + mode tag) is printed to stderr.
 
 **Tasks dir snapshot.** If the source session has a per-session tasks directory (`~/.claude/tasks/<orig-session-id>/`), it's deep-copied to the new session's tasks dir (`~/.claude/tasks/<new-session-id>/`) so the compacted session starts with the same task state. The copy is independent: later `TaskCreate` / `TaskUpdate` calls on the compacted session don't mutate the source's tasks, and vice versa — source sessions can still be continued or forked cleanly. No-op when the source has no tasks dir.
 
-**Rehydration:** when Claude resumes into a compacted session and encounters a stub, it can run the embedded `ambix query` command to retrieve the original pre-compaction tool output. Empirically validated against Claude Code 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
+**Rehydration:** when Claude resumes into a compacted session and encounters a stub (or reads the bundled `<turns>` list), it can run the embedded `ambix query` command to retrieve the original pre-compaction tool output. Empirically validated against Claude Code 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## file-at
 

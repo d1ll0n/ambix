@@ -42,7 +42,12 @@ Compact a session into a new resumable JSONL:
 ambix compact /path/to/session.jsonl --full-recent 10
 ```
 
-Emits a new session file with older turns retained structurally (tool_result bodies replaced by rehydration stubs that point at `ambix query`) and the last N rounds preserved verbatim. Claude Code's `/resume` picks up the compacted session in the source's project dir. Alternative to CC's built-in `/compact` when you want turn-by-turn navigability instead of a narrative summary.
+Emits a new session file Claude Code's `/resume` picks up in the source's project dir. The last `--full-recent N` rounds are preserved verbatim; older turns are condensed. Two render modes for the condensed range:
+
+- **`--mode bundled` (default)** — all condensed turns collapse into a single user-role message with an `<ambix-compaction-marker>` preamble + XML `<turns>` list of per-entry summaries. Smallest output (~3-10% of source), simplest for the resumed agent to parse, and structurally immune to unknown-tool bloat. `TaskCreate` / `TaskUpdate` / etc. are still emitted as real entries so CC can rebuild its live task list.
+- **`--mode structural`** — every condensed turn stays as a real entry; tool_result bodies are swapped for rehydration stubs and oversized string fields are truncated with a preview. Bigger (~25-30% of source) but keeps per-entry fidelity for downstream tooling.
+
+Either way, an agent can pull the original content of any condensed turn on demand via `ambix query <orig-session-id> <ix>`. Alternative to CC's built-in `/compact` when you want turn-by-turn navigability instead of a narrative summary.
 
 ### Subcommands
 
@@ -52,7 +57,7 @@ Emits a new session file with older turns retained structurally (tool_result bod
 | `ambix analyze <session>` | Deterministic analysis only (JSON to stdout) |
 | `ambix info <session>` | Minimal session summary (metadata + token rollup) |
 | `ambix brief <session>` | Chronological per-round summary for context recovery |
-| `ambix compact <session>` | Emit a resumable compacted JSONL (stubs + divider + preserved tail) |
+| `ambix compact <session>` | Emit a resumable compacted JSONL (`--mode bundled` default, or `--mode structural`) |
 | `ambix stage <session>` | Stage a session into a tmp workspace |
 | `ambix file-at <path> <ix>` | Print a tracked file's content at a given turn index |
 | `ambix query <session> <sub>` | Search within a session log (tool-uses, tool-results, text-search, show) |
