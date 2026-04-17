@@ -256,9 +256,12 @@ function condenseEntry(
     stubToolResultsInUserEntry(cloned, sourceIx, origSessionId, toolUseMap, ambixCmd, stats);
   }
 
-  // 2. Walk message.content type-aware: truncate tool_use inputs, leave
-  //    text blocks alone (conversational), leave tool_result alone (handled
-  //    by step 1).
+  // 2. Walk message.content type-aware:
+  //    - tool_use blocks: truncate input fields
+  //    - text blocks: preserve (conversational content)
+  //    - tool_result blocks: skip (handled by step 1)
+  //    - document / image / anything else: sweep (catches base64 blobs,
+  //      large attachment payloads that aren't the agent's words)
   const msg = cloned.message;
   if (msg && typeof msg === "object") {
     const m = msg as Record<string, unknown>;
@@ -267,24 +270,43 @@ function condenseEntry(
       for (const blk of content) {
         if (!blk || typeof blk !== "object") continue;
         const b = blk as Record<string, unknown>;
+        const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
         if (b.type === "tool_use" && b.input !== undefined && b.input !== null) {
-          const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
           b.input = truncateOversizedStrings(b.input, sweepOpts, subStats);
-          stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
-          stats.bytesSaved += subStats.bytesSaved;
+        } else if (b.type === "text" || b.type === "tool_result") {
+          // preserve text (conversational); tool_result already stubbed
+        } else {
+          // document / image / other non-text block type — sweep all string
+          // fields. Base64 payloads land in `source.data` for document/image
+          // blocks and the sweep collapses them.
+          for (const [k, v] of Object.entries(b)) {
+            if (k === "type") continue;
+            b[k] = truncateOversizedStrings(v, sweepOpts, subStats);
+          }
         }
-        // text blocks: preserved
-        // tool_result blocks: handled by stubToolResultsInUserEntry
+        stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
+        stats.bytesSaved += subStats.bytesSaved;
       }
     }
     // When `content` is a string (plain user text), pass through.
   }
 
-  // 3. Sweep every top-level field EXCEPT `message` (which we've already
-  //    handled surgically). Catches toolUseResult sidecars, attachment
-  //    payloads, system hookInfos, anything else oversized.
+  // 3. For fields outside `message`: sweep most of them, but replace
+  //    `toolUseResult` entirely — it's CC's UI-only sidecar that duplicates
+  //    data we've already summarized in the stubbed tool_result block.
+  //    Its nested structures rarely trigger per-field truncation (each
+  //    leaf is under the threshold) yet aggregate to 10-20KB per Edit.
   for (const [k, v] of Object.entries(cloned)) {
     if (k === "message") continue;
+    if (k === "toolUseResult" && v !== null && v !== undefined) {
+      const originalBytes = Buffer.byteLength(JSON.stringify(v), "utf8");
+      if (originalBytes > CONDENSED_INPUT_MAX_FIELD_BYTES) {
+        cloned[k] = marker;
+        stats.truncatedInputFieldCount += 1;
+        stats.bytesSaved += Math.max(0, originalBytes - Buffer.byteLength(marker, "utf8"));
+      }
+      continue;
+    }
     const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
     cloned[k] = truncateOversizedStrings(v, sweepOpts, subStats);
     stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
