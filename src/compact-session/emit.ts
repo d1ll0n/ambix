@@ -19,6 +19,24 @@ export const DEFAULT_MAX_FIELD_BYTES = 500;
 /** Default number of chars retained as a preview in front of the truncation marker. */
 export const DEFAULT_PREVIEW_CHARS = 100;
 
+/**
+ * Tools whose tool_use inputs and tool_result bodies MUST pass through
+ * verbatim, even in the condensed section.
+ *
+ * CC reconstructs its live task list at resume time from the Task*
+ * tool_uses + tool_results in the history. Stubbing them blanks the
+ * list. Payloads are tiny (~6KB total per session) so preserving has
+ * no practical cost.
+ */
+const PRESERVE_TOOLS = new Set([
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskGet",
+  "TaskList",
+  "TaskOutput",
+  "TaskStop",
+]);
+
 export interface EmitOptions {
   /** Source session's deduped entry stream. */
   sourceEntries: ReadonlyArray<LogEntry>;
@@ -308,7 +326,11 @@ function condenseEntry(
         const b = blk as Record<string, unknown>;
         const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
         if (b.type === "tool_use" && b.input !== undefined && b.input !== null) {
-          b.input = truncateOversizedStrings(b.input, sweepOpts, subStats);
+          if (typeof b.name === "string" && PRESERVE_TOOLS.has(b.name)) {
+            // Skip — CC reads these inputs at resume to rebuild state.
+          } else {
+            b.input = truncateOversizedStrings(b.input, sweepOpts, subStats);
+          }
         } else if (b.type === "text" || b.type === "tool_result") {
           // preserve text (conversational); tool_result already stubbed
         } else {
@@ -366,6 +388,9 @@ function stubToolResultsInUserEntry(
     if (!isToolResultBlock(blk as unknown as ToolResultBlock)) continue;
     const resultBlk = blk as unknown as ToolResultBlock;
     const toolInfo = toolUseMap.get(resultBlk.tool_use_id);
+    // Preserve results for tools whose output CC reads at resume to
+    // reconstruct harness state (see PRESERVE_TOOLS).
+    if (toolInfo && PRESERVE_TOOLS.has(toolInfo.name)) continue;
     const originalBytes = measureToolResultBytes(resultBlk);
     // Use the tool_result entry's own ix (this entry), NOT the paired tool_use's,
     // so `ambix query <session> <ix>` returns the original tool_result body

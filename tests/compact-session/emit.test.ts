@@ -414,6 +414,63 @@ describe("emit", () => {
     expect(snapshots).toHaveLength(1);
   });
 
+  it("preserves TaskCreate tool_use inputs AND the matched tool_result verbatim in the condensed section", async () => {
+    // CC rebuilds its task list on resume by scanning Task* tool_uses +
+    // tool_results. If we truncate either, the list comes back empty.
+    const taskUseId = "tu_task_create_1";
+    const longDescription = "d".repeat(800); // >500B threshold
+    const text = joinLines(
+      userLine({ text: "kick off", ts: "2026-04-13T10:00:00Z" }),
+      toolUseAssistantLine({
+        name: "TaskCreate",
+        input: {
+          subject: "important task",
+          description: longDescription,
+          activeForm: "doing the thing",
+        },
+        toolUseId: taskUseId,
+        ts: "2026-04-13T10:00:10Z",
+      }),
+      toolResultUserLine({
+        toolUseId: taskUseId,
+        content: "Task #5 created successfully: important task",
+        ts: "2026-04-13T10:00:11Z",
+      }),
+      userLine({ text: "trigger preserve boundary", ts: "2026-04-13T10:01:00Z" }),
+      userLine({ text: "another", ts: "2026-04-13T10:02:00Z" })
+    );
+    const session = new Session(writeFixture(dir, "session.jsonl", text));
+    const entries = await session.messages();
+
+    const { entries: emitted } = emit({
+      sourceEntries: entries,
+      newSessionId: "new-session",
+      origSessionId: "orig",
+      fullRecent: 1,
+      cwd: "",
+      gitBranch: "",
+      version: "",
+    });
+
+    // Both blocks must appear verbatim in the condensed section.
+    const joined = emitted.map((e) => JSON.stringify(e)).join("\n");
+    expect(joined).toContain(longDescription);
+    expect(joined).toContain("Task #5 created successfully: important task");
+    // The TaskCreate tool_result content must be the original string, not a stub.
+    const tr = emitted.find((e) => {
+      if (e.type !== "user") return false;
+      const c = (e as { message?: { content?: unknown } }).message?.content;
+      if (!Array.isArray(c)) return false;
+      return c.some(
+        (b: { type?: string; tool_use_id?: string }) =>
+          b.type === "tool_result" && b.tool_use_id === taskUseId
+      );
+    }) as { message: { content: Array<{ type: string; content?: unknown }> } } | undefined;
+    expect(tr).toBeDefined();
+    const trBlock = tr?.message.content.find((b) => b.type === "tool_result");
+    expect(trBlock?.content).toBe("Task #5 created successfully: important task");
+  });
+
   it("empty source — just emits a divider with preservedFirstIx past end", () => {
     const { entries: out, stats } = emit({
       ...baseEmit,
