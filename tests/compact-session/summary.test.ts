@@ -16,7 +16,7 @@ const baseOpts = {
 };
 
 describe("buildSummaryEntry", () => {
-  it("sets the canonical isCompactSummary fields CC's loader expects", () => {
+  it("emits a plain user entry (not isCompactSummary) with the expected base fields", () => {
     const e = buildSummaryEntry({
       ...baseOpts,
       condensedLastIx: 80,
@@ -24,8 +24,10 @@ describe("buildSummaryEntry", () => {
     });
 
     expect(e.type).toBe("user");
-    expect(e.isCompactSummary).toBe(true);
-    expect(e.isVisibleInTranscriptOnly).toBe(true);
+    // Deliberately NOT set: isCompactSummary / isVisibleInTranscriptOnly would
+    // cause CC to hide pre-divider entries from the model — see summary.ts.
+    expect(e.isCompactSummary).toBeUndefined();
+    expect(e.isVisibleInTranscriptOnly).toBeUndefined();
     expect(e.isSidechain).toBe(false);
     expect(e.uuid).toBe("summary-uuid");
     expect(e.parentUuid).toBe("prev-uuid");
@@ -39,6 +41,10 @@ describe("buildSummaryEntry", () => {
     expect(e.promptId).toBe("prompt-uuid");
     const msg = e.message as { role: string; content: string };
     expect(msg.role).toBe("user");
+    // Content is wrapped in an <ambix-compaction-marker> tag so the model
+    // can recognize it as structural metadata rather than a user turn.
+    expect(msg.content).toContain("<ambix-compaction-marker>");
+    expect(msg.content).toContain("</ambix-compaction-marker>");
   });
 
   it("normal split — content describes both condensed and preserved sections", () => {

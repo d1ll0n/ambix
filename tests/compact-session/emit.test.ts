@@ -69,7 +69,7 @@ describe("emit", () => {
     // Divider sits between round 1 and round 2
     expect(out[0].type).toBe("user"); // round 1 user
     expect(out[1].type).toBe("assistant"); // round 1 assistant
-    expect(out[2].isCompactSummary).toBe(true); // divider
+    expect((out[2].message as { content?: string }).content).toContain("ambix-compaction-marker"); // divider
     expect(out[3].type).toBe("user"); // round 2 user
     expect(out[4].type).toBe("assistant"); // round 2 assistant
   });
@@ -198,7 +198,7 @@ describe("emit", () => {
     expect(out).toHaveLength(3); // 2 entries + divider
     expect(out[0].type).toBe("user");
     expect(out[1].type).toBe("assistant");
-    expect(out[2].isCompactSummary).toBe(true); // divider at the end
+    expect((out[2].message as { content?: string }).content).toContain("ambix-compaction-marker"); // divider at the end
     expect(stats.condensedEntryCount).toBe(2);
     expect(stats.preservedEntryCount).toBe(0);
   });
@@ -216,7 +216,7 @@ describe("emit", () => {
     });
 
     expect(out).toHaveLength(3); // divider + 2 entries
-    expect(out[0].isCompactSummary).toBe(true); // divider at start
+    expect((out[0].message as { content?: string }).content).toContain("ambix-compaction-marker"); // divider at start
     expect((out[0] as { parentUuid: string | null }).parentUuid).toBeNull();
     expect(out[1].type).toBe("user");
     expect(out[2].type).toBe("assistant");
@@ -322,7 +322,7 @@ describe("emit", () => {
     });
 
     expect(out).toHaveLength(1);
-    expect(out[0].isCompactSummary).toBe(true);
+    expect((out[0].message as { content?: string }).content).toContain("ambix-compaction-marker");
     expect(stats.sourceEntryCount).toBe(0);
     expect(stats.condensedEntryCount).toBe(0);
     expect(stats.preservedEntryCount).toBe(0);

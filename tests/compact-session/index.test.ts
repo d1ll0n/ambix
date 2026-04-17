@@ -122,7 +122,7 @@ describe("compactSession", () => {
 
     // Verify the written file contains exactly one isCompactSummary entry
     const rawLines = readFileSync(output, "utf8").trim().split("\n");
-    const summaryLines = rawLines.filter((l) => l.includes('"isCompactSummary":true'));
+    const summaryLines = rawLines.filter((l) => l.includes("<ambix-compaction-marker>"));
     expect(summaryLines).toHaveLength(1);
   });
 

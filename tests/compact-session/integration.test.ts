@@ -80,7 +80,7 @@ describe("compactSession — integration (round-trip through parse-cc + info)", 
 
     // The file contains exactly one isCompactSummary line
     const rawLines = readFileSync(output, "utf8").trim().split("\n");
-    const summaryLines = rawLines.filter((l) => l.includes('"isCompactSummary":true'));
+    const summaryLines = rawLines.filter((l) => l.includes("<ambix-compaction-marker>"));
     expect(summaryLines).toHaveLength(1);
 
     // ambix info runs cleanly against the compacted session

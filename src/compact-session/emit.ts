@@ -113,7 +113,7 @@ export function emit(opts: EmitOptions): EmitResult {
     const inPreserved = ix >= preservedFirstIx;
     const source = entries[ix];
     const newUuid = uuidFn();
-    const newEntry = rewriteEntry({
+    const { entry: newEntry, hasUuid } = rewriteEntry({
       source,
       newUuid,
       newSessionId: opts.newSessionId,
@@ -126,7 +126,10 @@ export function emit(opts: EmitOptions): EmitResult {
       uuidFn,
     });
     emitted.push(newEntry);
-    prevUuid = newUuid;
+    // Only conversational entries (those with a source uuid) participate in the
+    // parentUuid chain. Structural entries pass through out-of-band, so the
+    // next conversational entry still parents off the previous conversational one.
+    if (hasUuid) prevUuid = newUuid;
 
     if (inPreserved) stats.preservedEntryCount++;
     else stats.condensedEntryCount++;
@@ -157,13 +160,19 @@ interface RewriteOpts {
   uuidFn: () => string;
 }
 
-function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
+function rewriteEntry(opts: RewriteOpts): { entry: Record<string, unknown>; hasUuid: boolean } {
   // Clone to avoid mutating the source entry (parse-cc returns shared objects).
   const cloned = JSON.parse(JSON.stringify(opts.source)) as Record<string, unknown>;
 
-  cloned.uuid = opts.newUuid;
-  cloned.parentUuid = opts.parentUuid;
-  cloned.sessionId = opts.newSessionId;
+  // Only rewrite fields that exist on the source. Adding `uuid`/`parentUuid`
+  // to entries that didn't have them (permission-mode, file-history-snapshot,
+  // queue-operation, last-prompt, …) injects those structural records into
+  // CC's conversation chain — CC then walks past them and fails to collect
+  // the real user/assistant turns. Structural entries must stay out-of-band.
+  const hasUuid = "uuid" in cloned;
+  if (hasUuid) cloned.uuid = opts.newUuid;
+  if ("parentUuid" in cloned) cloned.parentUuid = opts.parentUuid;
+  if ("sessionId" in cloned) cloned.sessionId = opts.newSessionId;
 
   // Regenerate cross-entry identifiers that CC treats as globally-scoped
   // routing keys (fork/branch tracking, request dedup). Leaving source-session
@@ -182,7 +191,7 @@ function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
     );
   }
 
-  return cloned;
+  return { entry: cloned, hasUuid };
 }
 
 function regenerateRoutingIds(cloned: Record<string, unknown>, uuidFn: () => string): void {

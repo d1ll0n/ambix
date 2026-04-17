@@ -35,14 +35,16 @@ export interface BuildSummaryOptions {
 }
 
 /**
- * Construct the `isCompactSummary: true` divider entry. Matches the field
- * shape CC writes for its own /compact events (verified against a real
- * paperclip session log, 2026-04-17).
+ * Construct the divider entry — a plain user message whose content is the
+ * explanatory prose for the compaction.
  *
- * Fields CC writes that aren't in parse-cc's `UserEntry` type but that CC
- * itself sets (`promptId`, `isVisibleInTranscriptOnly`) are included
- * — parse-cc's loader tolerates unknown fields, and leaving them off
- * might affect CC's UI rendering.
+ * Not marked `isCompactSummary: true`: CC treats that flag as a "pre-divider
+ * history is compacted, do not feed to model" signal. Observed empirically
+ * on 2026-04-17 — with the flag set on a real session that had post-divider
+ * entries, CC hid both the summary and the condensed stubbed entries from the
+ * model, defeating the whole point of structural preservation. Leaving the
+ * flag off makes the divider a normal-looking user turn; pre-divider stubs
+ * and the summary prose both reach the model's context.
  */
 export function buildSummaryEntry(opts: BuildSummaryOptions): Record<string, unknown> {
   const uuid = opts.uuid ?? randomUUID();
@@ -58,8 +60,6 @@ export function buildSummaryEntry(opts: BuildSummaryOptions): Record<string, unk
       role: "user",
       content: renderSummaryContent(opts),
     },
-    isVisibleInTranscriptOnly: true,
-    isCompactSummary: true,
     uuid,
     timestamp,
     userType: "external",
@@ -75,7 +75,11 @@ function renderSummaryContent(opts: BuildSummaryOptions): string {
   const hasCondensed = opts.condensedLastIx >= 0;
   const hasPreserved = opts.preservedFirstIx <= opts.lastSourceIx;
 
-  const lines: string[] = [`This session was compacted by ambix from ${opts.origSessionId}.`, ""];
+  const lines: string[] = [
+    "<ambix-compaction-marker>",
+    `This session was compacted by ambix from ${opts.origSessionId}.`,
+    "",
+  ];
 
   if (hasCondensed) {
     lines.push(
@@ -105,7 +109,8 @@ function renderSummaryContent(opts: BuildSummaryOptions): string {
   lines.push(
     "Do NOT infer or guess what stubbed tool_results contained — the stub text is a placeholder, not the real output. Run the embedded command when you need the actual content.",
     "",
-    "Continue the conversation from where it left off."
+    "Continue the conversation from where it left off.",
+    "</ambix-compaction-marker>"
   );
 
   return lines.join("\n");
