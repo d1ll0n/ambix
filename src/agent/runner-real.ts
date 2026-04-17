@@ -220,7 +220,7 @@ const defaultQueryFn: QueryFn = async function* (opts) {
   }
 };
 
-function aggregateResultTokens(r: {
+export function aggregateResultTokens(r: {
   usage?: {
     input_tokens?: number;
     output_tokens?: number;

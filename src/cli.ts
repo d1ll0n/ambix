@@ -7,6 +7,8 @@ import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
 import { compactSession } from "./compact/index.js";
 import { fileAt } from "./file-at.js";
+import { formatSessionInfo } from "./info/format.js";
+import { sessionInfo } from "./info/index.js";
 import { resolveSessionPath } from "./orchestrate/resolve.js";
 import { run } from "./orchestrate/run.js";
 import { runQuery } from "./query/index.js";
@@ -27,6 +29,8 @@ async function main(argv: string[]): Promise<number> {
       return runFileAt(rest);
     case "analyze":
       return runAnalyze(rest);
+    case "info":
+      return runInfo(rest);
     case "distill":
       return runDistill(rest);
     case "compact":
@@ -158,6 +162,43 @@ async function runAnalyze(args: string[]): Promise<number> {
   const session = new Session(sessionPath);
   const result = await analyze(session);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  return 0;
+}
+
+async function runInfo(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error("usage: ambix info <session-path-or-id> [--json]");
+    console.error("");
+    console.error("Print a minimal session summary: structural metadata plus a token rollup");
+    console.error("(totals + per-model). Cheaper than `analyze` — no tools/files/churn scan.");
+    console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
+    console.error("flags:");
+    console.error("  --json   emit SessionInfo JSON instead of the human-readable text block");
+    return 0;
+  }
+  const sessionArg = args[0];
+  const asJson = args.includes("--json");
+  if (!sessionArg) {
+    console.error("ambix info: missing <session-path-or-id>");
+    console.error("usage: ambix info <session-path-or-id> [--json]");
+    return 1;
+  }
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`ambix info: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+  const session = new Session(sessionPath);
+  const info = await sessionInfo(session);
+  if (asJson) {
+    process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
+  } else {
+    process.stdout.write(formatSessionInfo(info));
+  }
   return 0;
 }
 
@@ -335,6 +376,9 @@ function printUsage(): void {
   );
   console.error(
     "  analyze  <session-path-or-id>    deterministic analysis only (prints JSON to stdout)"
+  );
+  console.error(
+    "  info     <session-path-or-id>    minimal session summary (metadata + token rollup)"
   );
   console.error(
     "  stage    <session-path-or-id>    stage a session into a tmp workspace (prints layout JSON)"
