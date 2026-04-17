@@ -22,7 +22,7 @@ Validated via two throwaway /resume tests on 2026-04-17 (see §Validation). Clau
 ## Non-goals
 
 - Replacing CC's native `/compact` in-place behavior. This feature is additive and spawns a new session; it does not mutate the source.
-- Copying sidecar state (subagent logs, spill files, file-history blobs). Rehydration goes back to the original session's copies.
+- Copying read-only sidecar state (subagent logs, spill files, file-history blobs). Rehydration goes back to the original session's copies. **Exception:** the per-session tasks directory (`~/.claude/tasks/<sessionId>/`) is *deep-copied* from the source to the new session — tasks are live state the harness mutates via `TaskCreate` / `TaskUpdate`, and a fresh UUID with no matching dir would drop reminders and break the task lifecycle. Copying (not symlinking) keeps the two sessions independent, so the source can still be forked or continued without state entanglement.
 - Narrative distillation. That's `ambix distill`.
 - Path rewriting for cross-project relocation. That's a separate feature (parse-cc's `relocate`, parked in backlog).
 

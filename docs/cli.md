@@ -94,6 +94,8 @@ ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-ru
 
 **Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary is printed to stderr.
 
+**Tasks dir snapshot.** If the source session has a per-session tasks directory (`~/.claude/tasks/<orig-session-id>/`), it's deep-copied to the new session's tasks dir (`~/.claude/tasks/<new-session-id>/`) so the compacted session starts with the same task state. The copy is independent: later `TaskCreate` / `TaskUpdate` calls on the compacted session don't mutate the source's tasks, and vice versa — source sessions can still be continued or forked cleanly. No-op when the source has no tasks dir.
+
 **Rehydration:** when Claude resumes into a compacted session and encounters a stub, it can run the embedded `ambix query` command to retrieve the original pre-compaction tool output. Empirically validated against Claude Code 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## file-at

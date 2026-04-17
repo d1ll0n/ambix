@@ -414,6 +414,9 @@ async function runCompact(args: string[]): Promise<number> {
       `${result.stats.stubbedToolResultCount} stubs, ` +
       `~${result.stats.bytesSaved} bytes saved)`
   );
+  if (result.copiedTasksDir) {
+    console.error(`copied tasks dir: ${result.copiedTasksDir} (snapshot of source)`);
+  }
   console.log(result.newSessionId);
   return 0;
 }

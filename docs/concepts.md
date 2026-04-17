@@ -128,6 +128,8 @@ ambix compact /path/to/session.jsonl --full-recent 10
 
 The emitted file lives in the source session's CC project slug (`~/.claude/projects/<slug>/<new-uuid>.jsonl`) so it appears in `/resume` when the user is in that cwd. `parentUuid` is rebuilt as a linear chain through all emitted entries; `sessionId` on every entry is the fresh UUID.
 
+**Tasks sidecar snapshot.** CC keys per-session task state by session UUID (`~/.claude/tasks/<sessionId>/`). A fresh UUID by itself has no matching tasks dir, so `TaskCreate`/`TaskUpdate` reminders from the source would be lost. `ambix compact` deep-copies the source's tasks dir to the new session's, so the compacted session inherits the task state at compaction time. The two sessions are independent from that point on: subsequent task mutations on one side don't leak to the other, which matters if the source is later forked or continued.
+
 **Why this over `/compact`:** a resuming agent sees real user/assistant/tool_use/tool_result structure rather than narrative prose, so it can reason about turn boundaries and reach for `ambix query` to pull the exact historical content of any stubbed turn on demand. Validated end-to-end against CC 2.1.110 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## Narrative schema

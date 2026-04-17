@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Session } from "parse-cc";
+import { Session, listTasks } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { compactSession } from "../../src/compact-session/index.js";
 import {
@@ -14,8 +14,12 @@ import {
 
 describe("compactSession", () => {
   let dir: string;
+  let tasksBaseDir: string;
   beforeEach(() => {
     dir = makeTempDir();
+    // Isolated tasks root so tests never touch ~/.claude/tasks.
+    tasksBaseDir = path.join(dir, "tasks");
+    mkdirSync(tasksBaseDir, { recursive: true });
   });
   afterEach(() => {
     cleanupTempDir(dir);
@@ -35,7 +39,7 @@ describe("compactSession", () => {
     const srcSession = new Session(source);
     const output = path.join(dir, "compacted.jsonl");
 
-    const result = await compactSession(srcSession, { fullRecent: 1, output });
+    const result = await compactSession(srcSession, { fullRecent: 1, output, tasksBaseDir });
 
     expect(result.dryRun).toBe(false);
     expect(result.destPath).toBe(output);
@@ -64,9 +68,11 @@ describe("compactSession", () => {
       fullRecent: 10,
       output,
       dryRun: true,
+      tasksBaseDir,
     });
 
     expect(result.dryRun).toBe(true);
+    expect(result.copiedTasksDir).toBeNull();
     expect(existsSync(output)).toBe(false);
     expect(result.stats.sourceEntryCount).toBe(1);
   });
@@ -82,6 +88,7 @@ describe("compactSession", () => {
     const result = await compactSession(new Session(source), {
       fullRecent: 10,
       dryRun: true,
+      tasksBaseDir,
     });
 
     // Slug comes from cwd with / → - substitution; same convention as CC + distiller-log-capture.
@@ -106,6 +113,7 @@ describe("compactSession", () => {
     const result = await compactSession(new Session(source), {
       fullRecent: 1,
       output,
+      tasksBaseDir,
     });
 
     expect(result.stats.sourceEntryCount).toBe(6);
@@ -116,5 +124,97 @@ describe("compactSession", () => {
     const rawLines = readFileSync(output, "utf8").trim().split("\n");
     const summaryLines = rawLines.filter((l) => l.includes('"isCompactSummary":true'));
     expect(summaryLines).toHaveLength(1);
+  });
+
+  it("snapshots the source's tasks dir into the new session (copy, not symlink)", async () => {
+    // Write a source session whose sessionId has a corresponding tasks dir.
+    const source = writeFixture(
+      dir,
+      "source.jsonl",
+      joinLines(
+        userLine({ text: "one", uuid: "a", cwd: "/work", sessionId: "orig-with-tasks" }),
+        assistantLine({ text: "two", uuid: "b", sessionId: "orig-with-tasks" })
+      )
+    );
+    // Seed a couple of tasks for the source.
+    mkdirSync(path.join(tasksBaseDir, "orig-with-tasks"), { recursive: true });
+    writeFileSync(
+      path.join(tasksBaseDir, "orig-with-tasks", "1.json"),
+      JSON.stringify({
+        id: "1",
+        subject: "pending thing",
+        description: "",
+        status: "pending",
+        blocks: [],
+        blockedBy: [],
+      })
+    );
+
+    const output = path.join(dir, "compacted.jsonl");
+    const result = await compactSession(new Session(source), {
+      fullRecent: 1,
+      output,
+      tasksBaseDir,
+    });
+
+    expect(result.copiedTasksDir).toBe(path.join(tasksBaseDir, result.newSessionId));
+    // It's a real directory, not a symlink
+    expect(lstatSync(result.copiedTasksDir!).isDirectory()).toBe(true);
+    expect(lstatSync(result.copiedTasksDir!).isSymbolicLink()).toBe(false);
+
+    // listTasks reads the copied tasks.
+    const tasks = await listTasks(result.newSessionId, tasksBaseDir);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].subject).toBe("pending thing");
+
+    // Mutations on the source's tasks AFTER copy don't leak into the new session.
+    writeFileSync(
+      path.join(tasksBaseDir, "orig-with-tasks", "2.json"),
+      JSON.stringify({
+        id: "2",
+        subject: "added after compact",
+        description: "",
+        status: "pending",
+        blocks: [],
+        blockedBy: [],
+      })
+    );
+    const newTasksAfterSourceMutation = await listTasks(result.newSessionId, tasksBaseDir);
+    expect(newTasksAfterSourceMutation).toHaveLength(1);
+  });
+
+  it("refuses to overwrite --output if the path already exists", async () => {
+    const source = writeFixture(
+      dir,
+      "source.jsonl",
+      joinLines(userLine({ text: "hi", uuid: "a", cwd: "/work", sessionId: "s" }))
+    );
+    const output = path.join(dir, "already-there.jsonl");
+    writeFileSync(output, "previous content");
+
+    await expect(
+      compactSession(new Session(source), { fullRecent: 10, output, tasksBaseDir })
+    ).rejects.toThrow(/--output path already exists/);
+
+    // The pre-existing file is untouched.
+    expect(readFileSync(output, "utf8")).toBe("previous content");
+  });
+
+  it("copiedTasksDir is null when source has no tasks dir", async () => {
+    const source = writeFixture(
+      dir,
+      "source.jsonl",
+      joinLines(userLine({ text: "hi", uuid: "a", cwd: "/work", sessionId: "no-tasks" }))
+    );
+    const output = path.join(dir, "compacted.jsonl");
+
+    const result = await compactSession(new Session(source), {
+      fullRecent: 10,
+      output,
+      tasksBaseDir,
+    });
+
+    expect(result.copiedTasksDir).toBeNull();
+    expect(existsSync(path.join(tasksBaseDir, result.newSessionId))).toBe(false);
   });
 });

@@ -21,6 +21,12 @@ export interface CompactSessionOptions {
    * for previewing before committing.
    */
   dryRun?: boolean;
+  /**
+   * Override the tasks root directory (defaults to parse-cc's
+   * `defaultTasksDir()`, i.e. `~/.claude/tasks`). Testing seam only —
+   * real callers should leave this undefined.
+   */
+  tasksBaseDir?: string;
 }
 
 /** Result of a compact-session run. */
@@ -31,6 +37,11 @@ export interface CompactSessionResult {
   destPath: string;
   /** True if writes were skipped because `dryRun` was set. */
   dryRun: boolean;
+  /**
+   * Absolute path to the snapshotted tasks dir copied for the new session,
+   * or null if the source had no tasks dir (or we were in dry-run).
+   */
+  copiedTasksDir: string | null;
   /** Per-section counts and byte estimates. */
   stats: CompactSessionStats;
 }
