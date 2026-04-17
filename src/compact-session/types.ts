@@ -104,6 +104,15 @@ export interface CompactSessionStats {
    */
   bundledTurnCount: number;
   /**
+   * Bundled-mode only: entries containing both a Task* tool_use/tool_result
+   * AND non-Task content in the same entry. These pass through verbatim
+   * (the whole entry can't be cleanly split across the bundle boundary),
+   * which means non-Task content in them bypasses condensation. Typically
+   * zero or very small — non-zero values suggest the mixed-block case is
+   * common enough to warrant block-level splitting.
+   */
+  mixedPreservedEntryCount: number;
+  /**
    * Rough bytes removed (sum of original content sizes minus replacement
    * sizes, across tool_result stubs and tool_use input truncations).
    * Positive = savings.

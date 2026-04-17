@@ -90,8 +90,9 @@ export function emit(opts: EmitOptions): EmitResult {
     stubbedToolResultCount: 0,
     truncatedInputFieldCount: 0,
     bytesSaved: 0,
-    // Bundled-mode-only counter; always 0 in structural mode.
+    // Bundled-mode-only counters; always 0 in structural mode.
     bundledTurnCount: 0,
+    mixedPreservedEntryCount: 0,
   };
 
   const emitted: Record<string, unknown>[] = [];

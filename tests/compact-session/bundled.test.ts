@@ -287,6 +287,117 @@ describe("emitBundled", () => {
     }
   });
 
+  it("mixed assistant entry (TaskCreate + another tool_use in same entry) → passes through whole, flags as mixed", async () => {
+    // Hand-craft an assistant entry with TWO tool_use blocks in message.content:
+    // one Task*, one Bash. The current design passes the whole entry through
+    // (can't safely split blocks across the bundle boundary), and surfaces
+    // that via mixedPreservedEntryCount so we can detect if it's common.
+    const mixedAssistant = JSON.stringify({
+      type: "assistant",
+      uuid: "mixed-a",
+      parentUuid: null,
+      sessionId: "src",
+      timestamp: "2026-04-17T10:00:00Z",
+      message: {
+        id: "msg_1",
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [
+          { type: "tool_use", id: "tu_task", name: "TaskCreate", input: { subject: "x" } },
+          { type: "tool_use", id: "tu_bash", name: "Bash", input: { command: "echo hi" } },
+        ],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      },
+      requestId: "req_1",
+    });
+    const entries = await loadEntries(
+      joinLines(
+        userLine({ text: "kickoff", uuid: "u0" }),
+        mixedAssistant,
+        userLine({ text: "tail", uuid: "u_tail" })
+      )
+    );
+    const { entries: out, stats } = emitBundled({
+      sourceEntries: entries,
+      newSessionId: "s",
+      origSessionId: "orig",
+      fullRecent: 1,
+      cwd: "/w",
+      gitBranch: "main",
+      version: "2.1.100",
+      uuidFn: deterministicUuidFn("u"),
+      bundledUuid: "bundled",
+      bundledPromptId: "bp",
+      bundledTimestamp: "2026-04-17T10:00:00Z",
+    });
+
+    expect(stats.mixedPreservedEntryCount).toBe(1);
+    // The entry should appear verbatim (both tool_uses present) between
+    // the bundle and the preserved tail.
+    const preservedMixed = out[1] as {
+      type: string;
+      message: { content: Array<{ type: string; name: string }> };
+    };
+    expect(preservedMixed.type).toBe("assistant");
+    expect(preservedMixed.message.content.map((b) => b.name)).toEqual(["TaskCreate", "Bash"]);
+  });
+
+  it("strips XML-illegal control characters from turn content so <turns> stays parseable", async () => {
+    // Bash tool_use with an input that contains a NUL + an ANSI ESC byte.
+    // The bundled XML must not carry either through verbatim (they make the
+    // outer XML unparseable for any downstream agent that tries to parse).
+    const bashToolUse = JSON.stringify({
+      type: "assistant",
+      uuid: "a_ctrl",
+      parentUuid: null,
+      sessionId: "src",
+      timestamp: "2026-04-17T10:00:00Z",
+      message: {
+        id: "msg_x",
+        role: "assistant",
+        model: "claude-sonnet-4-6",
+        content: [
+          {
+            type: "tool_use",
+            id: "tu_ctrl",
+            name: "Bash",
+            // \u0000 (NUL), \u001b (ESC) — both XML-illegal in text content.
+            input: { command: "printf '\\x00\\x1b[31mred'" },
+          },
+        ],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+      requestId: "req_ctrl",
+    });
+    const entries = await loadEntries(
+      joinLines(
+        userLine({ text: "go", uuid: "u0" }),
+        bashToolUse,
+        userLine({ text: "tail", uuid: "u_tail" })
+      )
+    );
+    const { entries: out } = emitBundled({
+      sourceEntries: entries,
+      newSessionId: "s",
+      origSessionId: "orig",
+      fullRecent: 1,
+      cwd: "/w",
+      gitBranch: "main",
+      version: "2.1.100",
+      uuidFn: deterministicUuidFn("u"),
+      bundledUuid: "bundled",
+      bundledPromptId: "bp",
+      bundledTimestamp: "2026-04-17T10:00:00Z",
+    });
+
+    const content = (out[0] as { message: { content: string } }).message.content;
+    // Raw control bytes must NOT appear in the bundled content.
+    expect(content.includes("\u0000")).toBe(false);
+    expect(content.includes("\u001b")).toBe(false);
+  });
+
   it("empty source → one bundled message with no <turns>, no preserved entries", async () => {
     const { entries: out, stats } = emitBundled({
       sourceEntries: [],

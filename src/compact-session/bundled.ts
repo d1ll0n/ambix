@@ -22,7 +22,7 @@
 //     silently drop the task list. See src/compact-session/preserve-tools.ts.
 
 import { randomUUID } from "node:crypto";
-import type { LogEntry, ToolResultBlock, ToolUseBlock } from "parse-cc";
+import type { LogEntry, ToolResultBlock } from "parse-cc";
 import {
   isAssistantEntry,
   isFileHistorySnapshotEntry,
@@ -88,6 +88,7 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
     truncatedInputFieldCount: 0,
     bytesSaved: 0,
     bundledTurnCount: 0,
+    mixedPreservedEntryCount: 0,
   };
 
   // Pass 1: walk the condensed range, building the prose turn list AND
@@ -105,8 +106,10 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
       continue;
     }
 
-    if (entryIsPreservedTool(src, toolUseById)) {
+    const cls = classifyForBundling(src, toolUseById);
+    if (cls.preserve) {
       taskThroughputSources.push(src);
+      if (cls.mixed) stats.mixedPreservedEntryCount += 1;
       continue;
     }
 
@@ -190,7 +193,6 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
 interface ToolUseInfo {
   name: string;
   input: unknown;
-  block: ToolUseBlock;
 }
 
 function buildToolUseIndex(entries: ReadonlyArray<LogEntry>): Map<string, ToolUseInfo> {
@@ -199,32 +201,62 @@ function buildToolUseIndex(entries: ReadonlyArray<LogEntry>): Map<string, ToolUs
     if (!isAssistantEntry(e)) continue;
     for (const block of e.message.content) {
       if (isToolUseBlock(block)) {
-        map.set(block.id, { name: block.name, input: block.input, block });
+        map.set(block.id, { name: block.name, input: block.input });
       }
     }
   }
   return map;
 }
 
-function entryIsPreservedTool(src: LogEntry, toolUseById: Map<string, ToolUseInfo>): boolean {
+/**
+ * Classify an entry for bundled-mode dispatch. We preserve entries whole
+ * when they carry a Task* payload CC needs to replay on resume; otherwise
+ * they go into the bundled summary.
+ *
+ * "Mixed" entries — those that pair a Task* block with non-Task content in
+ * the same entry — are preserved whole (can't safely split a single entry
+ * across the bundle/post-bundle boundary without breaking CC's parentUuid
+ * expectations). The non-Task content slips through verbatim; callers get
+ * a `mixedPreservedEntryCount` stat so we can detect and fix if it
+ * becomes a real source of bloat in practice.
+ */
+function classifyForBundling(
+  src: LogEntry,
+  toolUseById: Map<string, ToolUseInfo>
+): { preserve: boolean; mixed: boolean } {
   if (isAssistantEntry(src)) {
+    let hasPreserved = false;
+    let hasOther = false;
     for (const block of src.message.content) {
-      if (isToolUseBlock(block) && shouldPreserveTool(block.name)) return true;
+      if (isToolUseBlock(block)) {
+        if (shouldPreserveTool(block.name)) hasPreserved = true;
+        else hasOther = true;
+      } else if (isTextBlock(block)) {
+        // Text adjacent to a Task* tool_use is expected and conversational;
+        // only count OTHER tool_use blocks as a mixed signal.
+      }
     }
-    return false;
+    return { preserve: hasPreserved, mixed: hasPreserved && hasOther };
   }
   if (isUserEntry(src)) {
     const content = src.message.content;
-    if (!Array.isArray(content)) return false;
+    if (!Array.isArray(content)) return { preserve: false, mixed: false };
+    let hasPreserved = false;
+    let hasOther = false;
     for (const block of content) {
       if (isToolResultBlock(block)) {
         const info = toolUseById.get(block.tool_use_id);
-        if (info && shouldPreserveTool(info.name)) return true;
+        if (info && shouldPreserveTool(info.name)) hasPreserved = true;
+        else hasOther = true;
+      } else if (isTextBlock(block)) {
+        // Plain text in a user tool_result entry is unusual; treat as other
+        // so mixed-entry reporting flags it for inspection.
+        hasOther = true;
       }
     }
-    return false;
+    return { preserve: hasPreserved, mixed: hasPreserved && hasOther };
   }
-  return false;
+  return { preserve: false, mixed: false };
 }
 
 interface TurnContext {
@@ -329,11 +361,25 @@ function shrinkText(text: string, ix: number, ctx: TurnContext): string {
 // Minimal XML escape — the turn content is embedded inside a broader XML
 // envelope, so reserved chars must be escaped. We're deliberately permissive
 // (don't escape quotes in body text) to keep the output readable.
+//
+// XML 1.0 forbids most ASCII control bytes in text content (only \t, \n, \r
+// are legal below U+0020). Tool output sometimes contains control bytes
+// (ANSI sequences in streamed Bash output, NULs in binary-adjacent stdout);
+// strip them so the outer `<turns>` block stays parseable by anything that
+// actually parses it. Losing these chars is safe — they're not meaningful
+// in a text summary.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional strip of XML-illegal control chars
+const XML_ILLEGAL_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+
+function stripIllegalControl(s: string): string {
+  return s.replace(XML_ILLEGAL_CONTROL_RE, "");
+}
+
 function escapeXmlText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return stripIllegalControl(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function escapeXmlAttr(s: string): string {
-  return s
+  return stripIllegalControl(s)
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
