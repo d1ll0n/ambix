@@ -5,7 +5,7 @@ import { Session } from "parse-cc";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
-import { compactSession } from "./compact/index.js";
+import { buildBrief } from "./brief/index.js";
 import { fileAt } from "./file-at.js";
 import { formatSessionInfo } from "./info/format.js";
 import { sessionInfo } from "./info/index.js";
@@ -33,8 +33,8 @@ async function main(argv: string[]): Promise<number> {
       return runInfo(rest);
     case "distill":
       return runDistill(rest);
-    case "compact":
-      return runCompact(rest);
+    case "brief":
+      return runBrief(rest);
     case "query":
       return runQueryCmd(rest);
     case "--help":
@@ -294,16 +294,16 @@ async function runDistill(args: string[]): Promise<number> {
   return 0;
 }
 
-async function runCompact(args: string[]): Promise<number> {
+async function runBrief(args: string[]): Promise<number> {
   if (hasHelp(args)) {
     console.error(
-      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     console.error("");
     console.error("Produce a chronological, per-round summary of a session for context recovery.");
     console.error("Each round, tool_use, and assistant text block is tagged with a rehydration");
     console.error("index (the same ix `ambix query <session> <ix>` resolves to), so an agent");
-    console.error("loading the compact output can pull full details for any entry on demand.");
+    console.error("loading the brief output can pull full details for any entry on demand.");
     console.error("");
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
@@ -314,15 +314,15 @@ async function runCompact(args: string[]): Promise<number> {
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("ambix compact: missing <session-path-or-id>");
+    console.error("ambix brief: missing <session-path-or-id>");
     console.error(
-      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     return 1;
   }
   const formatArg = parseFlag(args, "--format") ?? "xml";
   if (formatArg !== "xml" && formatArg !== "markdown") {
-    console.error(`ambix compact: invalid --format: ${formatArg} (expected xml or markdown)`);
+    console.error(`ambix brief: invalid --format: ${formatArg} (expected xml or markdown)`);
     return 1;
   }
   const outputArg = parseFlag(args, "--output");
@@ -331,17 +331,17 @@ async function runCompact(args: string[]): Promise<number> {
   try {
     sessionPath = await resolveSessionPath(sessionArg);
   } catch (err) {
-    console.error(`ambix compact: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`ambix brief: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   }
 
   const session = new Session(sessionPath);
-  const { content, stats } = await compactSession(session, { format: formatArg });
+  const { content, stats } = await buildBrief(session, { format: formatArg });
 
   if (outputArg) {
     await writeFile(outputArg, content, "utf8");
     console.error(
-      `wrote compact (${formatArg}, ${stats.rounds} rounds, ${stats.toolUses} tool uses) to ${outputArg}`
+      `wrote brief (${formatArg}, ${stats.rounds} rounds, ${stats.toolUses} tool uses) to ${outputArg}`
     );
   } else {
     process.stdout.write(content);
@@ -384,7 +384,7 @@ function printUsage(): void {
     "  stage    <session-path-or-id>    stage a session into a tmp workspace (prints layout JSON)"
   );
   console.error(
-    "  compact  <session-path-or-id>    chronological per-round summary for context recovery"
+    "  brief    <session-path-or-id>    chronological per-round summary for context recovery"
   );
   console.error(
     "  file-at  <path> <ix>             print a tracked file's content at a given turn index"
@@ -400,7 +400,7 @@ function printUsage(): void {
     "Note: stage, file-at, and query are primarily tools that the staged distiller agent"
   );
   console.error(
-    "calls during a distill run. distill, analyze, and compact are the human-facing entry points."
+    "calls during a distill run. distill, analyze, and brief are the human-facing entry points."
   );
 }
 

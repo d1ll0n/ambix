@@ -77,12 +77,12 @@ interface Artifact {
 
 `persistArtifact()` writes the artifact to `~/.ambix/sessions/<session-id>/artifact.json` by default (override via `outputRoot`).
 
-## Compact
+## Brief
 
-Compact is a standalone capability, independent of the distillation pipeline. It produces a chronological per-round summary of a session suitable for context recovery by humans or agents.
+Brief is a standalone capability, independent of the distillation pipeline. It produces a chronological per-round summary of a session suitable for context recovery by humans or agents.
 
 ```bash
-ambix compact /path/to/session.jsonl
+ambix brief /path/to/session.jsonl
 ```
 
 **How it works:**

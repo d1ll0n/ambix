@@ -1,6 +1,6 @@
-// src/compact/rounds.ts
+// src/brief/rounds.ts
 //
-// Round-level analysis for `ambix compact`:
+// Round-level analysis for `ambix brief`:
 //
 //   • extractUserText   — returns the text of a *human* user message
 //                         (rejects tool_result-wrapper user entries)
@@ -136,7 +136,7 @@ export function* iterRoundStream(
           ix,
         };
       }
-      // thinking / image / other blocks: skip (no compact signal)
+      // thinking / image / other blocks: skip (no brief signal)
     }
   }
 }

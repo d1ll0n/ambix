@@ -6,7 +6,7 @@ import {
   extractCommit,
   fmtPath,
   shorten,
-} from "../../src/compact/condensers.js";
+} from "../../src/brief/condensers.js";
 
 function result(content: unknown, isError = false): ToolResultBlock {
   return {

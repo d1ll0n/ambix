@@ -46,12 +46,12 @@ ambix stage <session-path-or-id> [flags]
 | `--max-inline-bytes <N>` | `2048` | Inline budget in bytes |
 | `-v`, `--verbose` | off | Print condensation report to stderr |
 
-## compact
+## brief
 
 Produce a chronological, per-round summary of a session for context recovery.
 
 ```
-ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]
+ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]
 ```
 
 | Flag | Default | Description |
@@ -59,7 +59,7 @@ ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]
 | `--format xml\|markdown` | `xml` | Output format |
 | `--output <file>` | stdout | Write to file instead of stdout |
 
-Each round, tool_use, and assistant text block is tagged with a rehydration index (the `ix` that `ambix query <session> show <ix>` resolves). An agent loading the compact output can pull full details for any entry on demand.
+Each round, tool_use, and assistant text block is tagged with a rehydration index (the `ix` that `ambix query <session> show <ix>` resolves). An agent loading the brief output can pull full details for any entry on demand.
 
 ## file-at
 

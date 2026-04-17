@@ -28,10 +28,10 @@ ambix distill /path/to/session.jsonl
 
 This runs the full pipeline (stage, analyze, distill, merge) and writes an artifact to `~/.ambix/sessions/<session-id>/`. Use `--mock` to run with a placeholder runner that skips the API call.
 
-Produce a compact chronological summary for context recovery:
+Produce a chronological brief for context recovery:
 
 ```bash
-ambix compact /path/to/session.jsonl
+ambix brief /path/to/session.jsonl
 ```
 
 This outputs a per-round XML summary where every tool call and assistant response is tagged with a rehydration index, so an agent can pull full details on demand via `ambix query`.
@@ -42,7 +42,7 @@ This outputs a per-round XML summary where every tool call and assistant respons
 |---------|-------------|
 | `ambix distill <session>` | Full pipeline: stage, analyze, distill, merge, persist |
 | `ambix analyze <session>` | Deterministic analysis only (JSON to stdout) |
-| `ambix compact <session>` | Chronological per-round summary for context recovery |
+| `ambix brief <session>` | Chronological per-round summary for context recovery |
 | `ambix stage <session>` | Stage a session into a tmp workspace |
 | `ambix file-at <path> <ix>` | Print a tracked file's content at a given turn index |
 | `ambix query <session> <sub>` | Search within a session log (tool-uses, tool-results, text-search, show) |

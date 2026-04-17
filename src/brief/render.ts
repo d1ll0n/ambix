@@ -1,7 +1,7 @@
-// src/compact/render.ts
+// src/brief/render.ts
 //
 // Two renderers that take a sequence of `Round`s and produce either
-// XML-tagged or markdown-styled compaction output. The XML variant is
+// XML-tagged or markdown-styled brief output. The XML variant is
 // the primary artifact (intended for LLM consumption as a
 // context-recovery input); the markdown variant is for humans reading
 // in a terminal or editor.
@@ -9,7 +9,7 @@
 import type { ToolResultBlock } from "parse-cc";
 import { type Round, iterRoundStream, roundBranch } from "./rounds.js";
 
-export type CompactFormat = "xml" | "markdown";
+export type BriefFormat = "xml" | "markdown";
 
 export interface RenderOptions {
   source: string;
@@ -18,8 +18,8 @@ export interface RenderOptions {
   toolUseCount: number;
 }
 
-/** Render a header block describing the session + compaction stats. */
-function renderHeader(fmt: CompactFormat, opts: RenderOptions): string {
+/** Render a header block describing the session + brief stats. */
+function renderHeader(fmt: BriefFormat, opts: RenderOptions): string {
   if (fmt === "xml") {
     return (
       `<session source="${opts.source}" ` +
@@ -29,7 +29,7 @@ function renderHeader(fmt: CompactFormat, opts: RenderOptions): string {
     );
   }
   return [
-    "# Session compaction",
+    "# Session brief",
     "",
     `**Source:** \`${opts.source}\``,
     `**Rounds:** ${opts.totalRounds}  •  **Assistant text:** ~${opts.assistantTextTokens} tok  •  **Tool uses:** ${opts.toolUseCount}`,
@@ -153,8 +153,8 @@ function renderRoundMarkdown(
  * Tracks `prevBranch` across rounds so the `<git branch="...">` marker
  * only fires on actual branch changes.
  */
-export function renderCompact(
-  fmt: CompactFormat,
+export function renderBrief(
+  fmt: BriefFormat,
   rounds: Round[],
   resultsById: Map<string, ToolResultBlock>,
   headerOpts: RenderOptions

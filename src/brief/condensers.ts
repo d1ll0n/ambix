@@ -1,6 +1,7 @@
-// src/compact/condensers.ts
+// src/brief/condensers.ts
 //
-// Per-tool "one-liner" renderers used by `ambix compact`. Each takes
+// Per-tool "one-liner" renderers used by `ambix brief` (and reused by
+// `ambix compact` for tool_result stub text). Each takes
 // a tool_use's input plus its (optional) tool_result and returns a
 // short human-readable summary. The goal is to preserve the intent of
 // each call (what file, what command, how big the output was) without
