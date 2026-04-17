@@ -6,6 +6,7 @@ import {
   type QueryFn,
   RealAgentRunner,
   type StreamedAgentMessage,
+  aggregateResultTokens,
   resolvePermissionMode,
 } from "../../src/agent/runner-real.js";
 import type { Narrative } from "../../src/artifact/types.js";
@@ -185,6 +186,105 @@ describe("RealAgentRunner", () => {
       initialMessage: "go",
     });
     expect(result.turnCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("aggregateResultTokens", () => {
+  // Guards against SDK drift: if a future SDK version renames modelUsage or
+  // changes its aggregation semantics, aggregateResultTokens must fall back
+  // to the top-level usage field rather than silently returning zeros.
+  // The log-derived authoritative path in orchestrate/run.ts still supersedes
+  // this value whenever capture succeeds, but this branch is the backup when
+  // capture fails.
+
+  it("prefers modelUsage and sums across models when populated", () => {
+    const result = {
+      usage: {
+        // Last-turn only — would undercount. Adapter must NOT use this.
+        input_tokens: 50,
+        output_tokens: 25,
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 500,
+      },
+      modelUsage: {
+        "claude-sonnet-4-6": {
+          inputTokens: 100,
+          outputTokens: 200,
+          cacheReadInputTokens: 3000,
+          cacheCreationInputTokens: 400,
+        },
+        "claude-opus-4-7": {
+          inputTokens: 50,
+          outputTokens: 100,
+          cacheReadInputTokens: 2000,
+          cacheCreationInputTokens: 300,
+        },
+      },
+    };
+    expect(aggregateResultTokens(result)).toEqual({
+      in: 150,
+      out: 300,
+      cache_read: 5000,
+      cache_write: 700,
+    });
+  });
+
+  it("falls back to top-level usage when modelUsage is missing", () => {
+    const result = {
+      usage: {
+        input_tokens: 50,
+        output_tokens: 25,
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 500,
+      },
+    };
+    expect(aggregateResultTokens(result)).toEqual({
+      in: 50,
+      out: 25,
+      cache_read: 1000,
+      cache_write: 500,
+    });
+  });
+
+  it("falls back to top-level usage when modelUsage is empty", () => {
+    const result = {
+      usage: {
+        input_tokens: 50,
+        output_tokens: 25,
+        cache_read_input_tokens: 1000,
+        cache_creation_input_tokens: 500,
+      },
+      modelUsage: {},
+    };
+    expect(aggregateResultTokens(result)).toEqual({
+      in: 50,
+      out: 25,
+      cache_read: 1000,
+      cache_write: 500,
+    });
+  });
+
+  it("defaults missing modelUsage fields to zero", () => {
+    const result = {
+      modelUsage: {
+        "claude-sonnet-4-6": { inputTokens: 100, outputTokens: 200 },
+      },
+    };
+    expect(aggregateResultTokens(result)).toEqual({
+      in: 100,
+      out: 200,
+      cache_read: 0,
+      cache_write: 0,
+    });
+  });
+
+  it("returns zero totals when neither modelUsage nor usage is populated", () => {
+    expect(aggregateResultTokens({})).toEqual({
+      in: 0,
+      out: 0,
+      cache_read: undefined,
+      cache_write: undefined,
+    });
   });
 });
 

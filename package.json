@@ -40,7 +40,6 @@
   "scripts": {
     "prepare": "husky",
     "build": "tsc",
-    "dev": "node --experimental-strip-types src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

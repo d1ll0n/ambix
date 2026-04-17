@@ -100,8 +100,12 @@ export async function run(opts: RunOptions): Promise<RunResult> {
     });
 
     // Compute authoritative distiller token usage from the captured
-    // log (the SDK adapter's numbers are unreliable — undercounts
-    // by ~3x. See docs/followups.md).
+    // log: walk the distiller session JSONL via aggregateTokens, which
+    // dedupes streaming-partial rolls by requestId. Preferred over
+    // distillResult.tokensUsed (derived from the SDK's result message)
+    // because earlier SDK versions only reported last-turn usage,
+    // undercutting multi-turn totals by roughly 3x. Kept as the
+    // primary source for resilience to future SDK drift.
     const authoritativeTokens = capture.destDir
       ? await computeDistillerUsageFromLog(capture.destDir)
       : null;
