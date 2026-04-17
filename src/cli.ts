@@ -6,6 +6,7 @@ import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
 import { buildBrief } from "./brief/index.js";
+import { compactSession } from "./compact-session/index.js";
 import { fileAt } from "./file-at.js";
 import { formatSessionInfo } from "./info/format.js";
 import { sessionInfo } from "./info/index.js";
@@ -35,6 +36,8 @@ async function main(argv: string[]): Promise<number> {
       return runDistill(rest);
     case "brief":
       return runBrief(rest);
+    case "compact":
+      return runCompact(rest);
     case "query":
       return runQueryCmd(rest);
     case "--help":
@@ -349,6 +352,72 @@ async function runBrief(args: string[]): Promise<number> {
   return 0;
 }
 
+async function runCompact(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error(
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
+    );
+    console.error("");
+    console.error("Produce a resumable compacted session JSONL. Older turns are retained");
+    console.error("structurally but their tool_result bodies are replaced with rehydration");
+    console.error("stubs; the last N rounds are preserved verbatim.");
+    console.error("");
+    console.error("The compacted session gets a fresh UUID and, by default, lands in CC's");
+    console.error("project dir for the source's cwd so it appears in /resume.");
+    console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
+    console.error("flags:");
+    console.error("  --full-recent N   rounds to preserve verbatim at the tail (default: 10)");
+    console.error("  --output <path>   override destination path");
+    console.error("  --dry-run         print the plan without writing");
+    return 0;
+  }
+  const sessionArg = args[0];
+  if (!sessionArg) {
+    console.error("ambix compact: missing <session-path-or-id>");
+    console.error(
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
+    );
+    return 1;
+  }
+
+  const fullRecentArg = parseFlag(args, "--full-recent");
+  let fullRecent: number | undefined;
+  if (fullRecentArg !== undefined) {
+    fullRecent = Number.parseInt(fullRecentArg, 10);
+    if (Number.isNaN(fullRecent) || fullRecent < 0) {
+      console.error(`ambix compact: invalid --full-recent: ${fullRecentArg}`);
+      return 1;
+    }
+  }
+  const output = parseFlag(args, "--output");
+  const dryRun = args.includes("--dry-run");
+
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`ambix compact: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+
+  const session = new Session(sessionPath);
+  const result = await compactSession(session, { fullRecent, output, dryRun });
+
+  const prefix = result.dryRun ? "[dry-run] would write" : "wrote";
+  console.error(
+    `${prefix} compacted session to ${result.destPath} ` +
+      `(${result.stats.sourceEntryCount} source entries → ` +
+      `${result.stats.condensedEntryCount} condensed + ` +
+      `${result.stats.preservedEntryCount} preserved, ` +
+      `${result.stats.stubbedToolResultCount} stubs, ` +
+      `~${result.stats.bytesSaved} bytes saved)`
+  );
+  console.log(result.newSessionId);
+  return 0;
+}
+
 async function runQueryCmd(args: string[]): Promise<number> {
   const { code, output } = await runQuery(args);
   process.stdout.write(output);
@@ -385,6 +454,9 @@ function printUsage(): void {
   );
   console.error(
     "  brief    <session-path-or-id>    chronological per-round summary for context recovery"
+  );
+  console.error(
+    "  compact  <session-path-or-id>    emit a resumable compacted JSONL (stubs + divider + preserved tail)"
   );
   console.error(
     "  file-at  <path> <ix>             print a tracked file's content at a given turn index"
