@@ -189,22 +189,13 @@ function rewriteEntry(opts: RewriteOpts): { entry: Record<string, unknown>; hasU
   // the compacted session cleanly.
   regenerateRoutingIds(cloned, opts.uuidFn);
 
-  if (opts.condense && isUserEntry(opts.source)) {
-    stubToolResultsInUserEntry(
+  if (opts.condense) {
+    condenseEntry(
       cloned,
+      opts.source,
       opts.sourceIx,
       opts.origSessionId,
       opts.toolUseMap,
-      opts.ambixCmd,
-      opts.stats
-    );
-  }
-
-  if (opts.condense && isAssistantEntry(opts.source)) {
-    truncateOversizedToolUseInputs(
-      cloned,
-      opts.sourceIx,
-      opts.origSessionId,
       opts.ambixCmd,
       opts.stats
     );
@@ -233,36 +224,69 @@ function regenerateRoutingIds(cloned: Record<string, unknown>, uuidFn: () => str
 }
 
 /**
- * Walk a condensed assistant entry's content blocks and truncate any oversized
- * string fields inside tool_use.input. Defends against large payloads in
- * Edit (old_string / new_string), Write (content), and any unknown-shape tool
- * that stuffs multi-KB strings into its input. The truncation marker cites
- * `ambix query <sid> <sourceIx>` so the agent can rehydrate the whole
- * assistant entry if it needs the original input.
+ * Condense a single entry in the condensed section:
+ *   - User entries: tool_result content gets a nice per-tool condenser summary;
+ *     plain user-text `message.content` strings pass through intact.
+ *   - Assistant entries: tool_use.input fields get swept (Edit old/new_string,
+ *     Write content, MCP payloads); text blocks' `text` field is preserved.
+ *   - Every entry type: sweep everything OUTSIDE `message.content`
+ *     (toolUseResult sidecars on Edit tool_results, attachment.stdout on
+ *     SessionStart hooks, etc.). This is the safety net for unknown shapes.
+ *
+ * Conversational text (human utterances + assistant explanations) is always
+ * preserved — the compacted session's point is to keep the transcript
+ * readable while deleting bulk tool byproducts.
  */
-function truncateOversizedToolUseInputs(
+function condenseEntry(
   cloned: Record<string, unknown>,
+  source: LogEntry,
   sourceIx: number,
   origSessionId: string,
+  toolUseMap: Map<string, { name: string; input: unknown; ix: number }>,
   ambixCmd: string | undefined,
   stats: CompactSessionStats
 ): void {
-  const msg = cloned.message as { content: unknown };
-  const content = msg.content;
-  if (!Array.isArray(content)) return;
   const cmd = ambixCmd ?? "ambix query";
   const marker = `[COMPACTION STUB — field truncated. Retrieve full entry via: ${cmd} ${origSessionId} ${sourceIx}]`;
-  for (const blk of content) {
-    if (!blk || typeof blk !== "object") continue;
-    const b = blk as Record<string, unknown>;
-    if (b.type !== "tool_use") continue;
-    if (b.input === undefined || b.input === null) continue;
+  const sweepOpts = { maxFieldBytes: CONDENSED_INPUT_MAX_FIELD_BYTES, marker };
+
+  // 1. Tool_result stubbing (user entries) — preserves tool_use→tool_result
+  //    pairing with a descriptive one-liner rather than a generic marker.
+  if (isUserEntry(source)) {
+    stubToolResultsInUserEntry(cloned, sourceIx, origSessionId, toolUseMap, ambixCmd, stats);
+  }
+
+  // 2. Walk message.content type-aware: truncate tool_use inputs, leave
+  //    text blocks alone (conversational), leave tool_result alone (handled
+  //    by step 1).
+  const msg = cloned.message;
+  if (msg && typeof msg === "object") {
+    const m = msg as Record<string, unknown>;
+    const content = m.content;
+    if (Array.isArray(content)) {
+      for (const blk of content) {
+        if (!blk || typeof blk !== "object") continue;
+        const b = blk as Record<string, unknown>;
+        if (b.type === "tool_use" && b.input !== undefined && b.input !== null) {
+          const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
+          b.input = truncateOversizedStrings(b.input, sweepOpts, subStats);
+          stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
+          stats.bytesSaved += subStats.bytesSaved;
+        }
+        // text blocks: preserved
+        // tool_result blocks: handled by stubToolResultsInUserEntry
+      }
+    }
+    // When `content` is a string (plain user text), pass through.
+  }
+
+  // 3. Sweep every top-level field EXCEPT `message` (which we've already
+  //    handled surgically). Catches toolUseResult sidecars, attachment
+  //    payloads, system hookInfos, anything else oversized.
+  for (const [k, v] of Object.entries(cloned)) {
+    if (k === "message") continue;
     const subStats = { truncatedFieldCount: 0, bytesSaved: 0 };
-    b.input = truncateOversizedStrings(
-      b.input,
-      { maxFieldBytes: CONDENSED_INPUT_MAX_FIELD_BYTES, marker },
-      subStats
-    );
+    cloned[k] = truncateOversizedStrings(v, sweepOpts, subStats);
     stats.truncatedInputFieldCount += subStats.truncatedFieldCount;
     stats.bytesSaved += subStats.bytesSaved;
   }
