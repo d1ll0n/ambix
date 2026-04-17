@@ -269,6 +269,50 @@ describe("emit", () => {
     expect(stubText).toMatch(/ambix query orig-sess 3/);
   });
 
+  it("regenerates promptId, requestId, and message.id so no source-session routing IDs leak through", async () => {
+    const entries = await loadSession(
+      joinLines(
+        userLine({ text: "hi", uuid: "u1" }),
+        assistantLine({
+          text: "hello",
+          uuid: "a1",
+          requestId: "req_SOURCE_REQUEST_ID_SHOULD_NOT_LEAK",
+        })
+      )
+    );
+
+    // Capture the source-side routing ID values before emit.
+    const sourceUser = entries[0] as Record<string, unknown>;
+    const sourceAsst = entries[1] as Record<string, unknown>;
+    const sourcePromptId = sourceUser.promptId as string | undefined;
+    const sourceRequestId = sourceAsst.requestId as string | undefined;
+    const sourceMsgId = ((sourceAsst.message as Record<string, unknown>)?.id as string) ?? "";
+
+    const { entries: out } = emit({
+      ...baseEmit,
+      sourceEntries: entries,
+      fullRecent: 10,
+      uuidFn: makeUuidFn(),
+    });
+
+    // No emitted entry carries the source-session routing IDs.
+    for (const e of out) {
+      const rec = e as Record<string, unknown>;
+      if (sourcePromptId) expect(rec.promptId).not.toBe(sourcePromptId);
+      if (sourceRequestId) expect(rec.requestId).not.toBe(sourceRequestId);
+      const mId = (rec.message as Record<string, unknown> | undefined)?.id;
+      if (sourceMsgId && mId) expect(mId).not.toBe(sourceMsgId);
+
+      // When present, the fresh values match the expected format prefixes.
+      if (typeof rec.requestId === "string") {
+        expect(rec.requestId.startsWith("req_")).toBe(true);
+      }
+      if (mId && typeof mId === "string") {
+        expect(mId.startsWith("msg_")).toBe(true);
+      }
+    }
+  });
+
   it("empty source — just emits a divider with preservedFirstIx past end", () => {
     const { entries: out, stats } = emit({
       ...baseEmit,

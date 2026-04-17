@@ -123,6 +123,7 @@ export function emit(opts: EmitOptions): EmitResult {
       toolUseMap,
       ambixCmd: opts.ambixCmd,
       stats,
+      uuidFn,
     });
     emitted.push(newEntry);
     prevUuid = newUuid;
@@ -153,6 +154,7 @@ interface RewriteOpts {
   toolUseMap: Map<string, { name: string; input: unknown; ix: number }>;
   ambixCmd?: string;
   stats: CompactSessionStats;
+  uuidFn: () => string;
 }
 
 function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
@@ -162,6 +164,13 @@ function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
   cloned.uuid = opts.newUuid;
   cloned.parentUuid = opts.parentUuid;
   cloned.sessionId = opts.newSessionId;
+
+  // Regenerate cross-entry identifiers that CC treats as globally-scoped
+  // routing keys (fork/branch tracking, request dedup). Leaving source-session
+  // values in place makes CC associate the compacted entries back to the source
+  // session and skip them when building the resume context. Fresh IDs detach
+  // the compacted session cleanly.
+  regenerateRoutingIds(cloned, opts.uuidFn);
 
   if (opts.condense && isUserEntry(opts.source)) {
     stubToolResultsInUserEntry(
@@ -174,6 +183,25 @@ function rewriteEntry(opts: RewriteOpts): Record<string, unknown> {
   }
 
   return cloned;
+}
+
+function regenerateRoutingIds(cloned: Record<string, unknown>, uuidFn: () => string): void {
+  // promptId — present on user/assistant entries; plain UUID in CC.
+  if (typeof cloned.promptId === "string") cloned.promptId = uuidFn();
+
+  // requestId — assistant-only, Anthropic API request identifier.
+  if (typeof cloned.requestId === "string") {
+    cloned.requestId = `req_${uuidFn().replaceAll("-", "").slice(0, 22)}`;
+  }
+
+  // message.id — assistant-only, Anthropic API message identifier.
+  const msg = cloned.message;
+  if (msg && typeof msg === "object") {
+    const m = msg as Record<string, unknown>;
+    if (typeof m.id === "string") {
+      m.id = `msg_${uuidFn().replaceAll("-", "").slice(0, 22)}`;
+    }
+  }
 }
 
 function stubToolResultsInUserEntry(
