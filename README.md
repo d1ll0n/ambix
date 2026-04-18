@@ -49,6 +49,8 @@ Emits a new session file Claude Code's `/resume` picks up in the source's projec
 
 Either way, an agent can pull the original content of any condensed turn on demand via `ambix query <orig-session-id> <ix>`. Alternative to CC's built-in `/compact` when you want turn-by-turn navigability instead of a narrative summary.
 
+**Known limitation:** CC's "restore conversation and code" rewind relies on `file-history-snapshot` entries, which ambix drops from the condensed range to save bytes. Rewind-with-code from a compacted session can only reach into the preserved tail; code state before that is only recoverable via `ambix query` + manual file edits.
+
 ### Subcommands
 
 | Command | Description |

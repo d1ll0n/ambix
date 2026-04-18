@@ -84,7 +84,7 @@ Alternative: remove the existing `compact` entirely if no downstream users depen
 [preserved entries — turns N-k+1..N]      ← all content passed through verbatim
 ```
 
-Both modes drop `file-history-snapshot` entries from the condensed range (CC never feeds them to the model; they commonly add 8+ KB apiece).
+Both modes drop `file-history-snapshot` entries from the condensed range (CC never feeds them to the model; they commonly add 8+ KB apiece). **Trade-off:** CC's rewind-with-code feature reconstructs file state from these snapshots, so rewinding into the condensed range is lost. Rewind inside the preserved tail still works. Tracked in §Open questions as a known limitation.
 
 Empty condensed section (all turns within `--full-recent` window): skip turns/condensed content, still emit the summary entry + preserved. Empty preserved section (`--full-recent 0`): still emit summary so the agent always has the explanatory preamble.
 
@@ -253,6 +253,7 @@ From parse-cc: `defaultTasksDir` + `findTasksDir` for locating the source's task
 
 ## Open questions / follow-ups
 
+- **Rewind-with-code limited to the preserved tail (known limitation).** CC's rewind feature reconstructs file content from `file-history-snapshot` entries, which we drop from the condensed range (dropping saves megabytes and CC doesn't feed them to the model). A resumed agent cannot rewind-with-code back into the condensed range — only into the preserved tail. Document at CLI/README level so users know. If it turns into a real friction point, a fix path is: keep `file-history-snapshot` entries that fall within a configurable lookback window past the tail, or snapshot the current tree at compact time.
 - **Mixed-block Task* entries (concern).** An entry that carries a `Task*` block *alongside* a non-Task tool_use/result currently passes through whole (we can't cleanly split a single entry across the bundle boundary without breaking CC's parentUuid chain). Tracked via `stats.mixedPreservedEntryCount` so we can detect if it's a real bloat source in practice. Fix path: split at block granularity and emit the Task* slice as its own synthetic entry.
 - **Stub density limits:** at what stub count does Claude lose structural fidelity? Probably fine at <200, unknown beyond. Measure during dogfooding — primarily relevant for structural mode.
 - **Multi-compaction sessions:** if a session was already CC-compacted once and we re-compact it, does the resumed agent handle the nested context cleanly? Verify.

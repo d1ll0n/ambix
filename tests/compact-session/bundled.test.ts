@@ -213,16 +213,18 @@ describe("emitBundled", () => {
     expect(serialized).not.toContain("x".repeat(1000));
   });
 
-  it("truncates oversized user text blocks with a <truncated> preview + rehydration marker", async () => {
-    const bigText = "A".repeat(2000);
+  it("conversational user text under the sanity cap passes through verbatim (no cap by default)", async () => {
+    // 2 KB of user text is well within the sanity cap; should land in the
+    // bundled message unchanged. (Old behavior: capped at 500B. New
+    // behavior: conversational text is preserved — parity with structural.)
+    const midText = "A".repeat(2000);
     const entries = await loadEntries(
       joinLines(
-        userLine({ text: bigText, uuid: "u_big" }),
-        assistantLine({ text: "short reply", uuid: "a" }),
+        userLine({ text: midText, uuid: "u_mid" }),
+        assistantLine({ text: "reply", uuid: "a" }),
         userLine({ text: "tail", uuid: "u_tail" })
       )
     );
-
     const { entries: out, stats } = emitBundled({
       sourceEntries: entries,
       newSessionId: "s",
@@ -231,22 +233,51 @@ describe("emitBundled", () => {
       cwd: "/w",
       gitBranch: "main",
       version: "2.1.100",
-      maxFieldBytes: 500,
+      uuidFn: deterministicUuidFn("u"),
+      bundledUuid: "bundled",
+      bundledPromptId: "bp",
+      bundledTimestamp: "2026-04-17T10:00:00Z",
+    });
+    expect(stats.truncatedInputFieldCount).toBe(0);
+    const content = (out[0] as { message: { content: string } }).message.content;
+    expect(content).toMatch(/A{2000}/); // full 2KB text verbatim
+    expect(content).not.toContain("truncated_text"); // no truncation element
+  });
+
+  it("extremely oversized text blocks (>16KB sanity cap) use <truncated_text> element, not inline stub pattern", async () => {
+    // 20 KB — above the sanity cap. Should emit a <truncated_text> element
+    // with preview body + bytes attribute; crucially NOT the legacy
+    // `<truncated>…</truncated>[COMPACTION STUB …]` pattern that caused the
+    // pattern-match echo failure.
+    const hugeText = "B".repeat(20 * 1024);
+    const entries = await loadEntries(
+      joinLines(
+        userLine({ text: hugeText, uuid: "u_huge" }),
+        assistantLine({ text: "ok", uuid: "a" }),
+        userLine({ text: "tail", uuid: "u_tail" })
+      )
+    );
+    const { entries: out, stats } = emitBundled({
+      sourceEntries: entries,
+      newSessionId: "s",
+      origSessionId: "orig",
+      fullRecent: 1,
+      cwd: "/w",
+      gitBranch: "main",
+      version: "2.1.100",
       previewChars: 50,
       uuidFn: deterministicUuidFn("u"),
       bundledUuid: "bundled",
       bundledPromptId: "bp",
       bundledTimestamp: "2026-04-17T10:00:00Z",
     });
-
     expect(stats.truncatedInputFieldCount).toBeGreaterThan(0);
     const content = (out[0] as { message: { content: string } }).message.content;
-    expect(content).toContain("<truncated>");
-    expect(content).toContain("COMPACTION STUB");
-    expect(content).toContain("ambix query orig 0"); // rehydration points at ix=0
-    // Preview is present, full 2000-char body is not
-    expect(content).toMatch(/A{50}/);
-    expect(content).not.toMatch(/A{1000}/);
+    expect(content).toMatch(/<truncated_text bytes="20480" ix="0">B{50}…<\/truncated_text>/);
+    // Explicitly verify we do NOT emit the old pattern-match-prone format.
+    expect(content).not.toContain("<truncated>");
+    expect(content).not.toContain("[COMPACTION STUB");
+    expect(content).not.toMatch(/B{1000}/);
   });
 
   it("regenerates routing IDs on every passed-through entry (no source-session IDs leak)", async () => {

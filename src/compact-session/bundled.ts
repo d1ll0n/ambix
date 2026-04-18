@@ -17,9 +17,12 @@
 //   - Collapsing every non-preserved entry into prose means shape-specific
 //     bloat (MCP tools with large payloads, unknown fields) can't leak —
 //     the prose renderer sees every field and truncates by size.
-//   - Task* entries are the one exception because CC reconstructs task
-//     state by replaying them on resume; collapsing them to prose would
-//     silently drop the task list. See src/compact-session/preserve-tools.ts.
+//   - Per-tool structured XML (via condense-input + render-bundled-xml)
+//     keeps information parity with raw tool_use.input while framing the
+//     content as clearly a summary, not a transcript the agent could
+//     pattern-match back into a new tool call.
+//   - Task* entries pass through as real entries because CC reconstructs
+//     task state by replaying them on resume. See preserve-tools.ts.
 
 import { randomUUID } from "node:crypto";
 import type { LogEntry, ToolResultBlock } from "parse-cc";
@@ -31,12 +34,22 @@ import {
   isToolUseBlock,
   isUserEntry,
 } from "parse-cc";
-import { condenseToolUse, toolResultText } from "../brief/condensers.js";
 import { groupIntoRounds } from "../brief/rounds.js";
+import { type CondensedToolInput, condenseToolInput } from "./condense-input.js";
 import { rewritePreservedEntry } from "./emit-shared.js";
 import { shouldPreserveTool } from "./preserve-tools.js";
+import { renderToolResultXml, renderToolUseXml } from "./render-bundled-xml.js";
 import { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS } from "./tuning.js";
 import type { CompactSessionStats } from "./types.js";
+
+/**
+ * Sanity clamp for user/assistant text blocks. Conversational text should
+ * pass through verbatim by default (structural parity), but an individual
+ * text block that's truly unreasonable (e.g. an embedded base64 blob
+ * somehow) should still get truncation treatment. Set high enough that
+ * natural human + agent prose always passes.
+ */
+const TEXT_BLOCK_SANITY_CAP_BYTES = 16 * 1024;
 
 export interface EmitBundledOptions {
   sourceEntries: ReadonlyArray<LogEntry>;
@@ -56,7 +69,7 @@ export interface EmitBundledOptions {
   bundledPromptId?: string;
   /** Stub command prefix override. Default `"ambix query"`. */
   ambixCmd?: string;
-  /** UTF-8 byte threshold for in-prose text-block truncation. */
+  /** UTF-8 byte threshold for in-prose tool_use field truncation. */
   maxFieldBytes?: number;
   /** Preview chars kept in front of the truncation marker. */
   previewChars?: number;
@@ -75,8 +88,8 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
   const maxFieldBytes = opts.maxFieldBytes ?? DEFAULT_MAX_FIELD_BYTES;
   const previewChars = opts.previewChars ?? DEFAULT_PREVIEW_CHARS;
 
-  // Index tool_use → { name, input } for rendering tool_result turns
-  // (we need the tool name to pick a condenser for the result).
+  // Index tool_use by id so we can render `<tool_result>` with the correct
+  // tool name (the result block itself only carries tool_use_id).
   const toolUseById = buildToolUseIndex(entries);
 
   const stats: CompactSessionStats = {
@@ -95,11 +108,11 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
   // the list of Task* entries to pass through verbatim.
   const turnXmlLines: string[] = [];
   const taskThroughputSources: LogEntry[] = [];
+  const condenseOpts = { maxFieldBytes, previewChars };
 
   for (let ix = 0; ix < preservedFirstIx; ix++) {
     const src = entries[ix];
 
-    // Drop file-history-snapshot: CC never feeds these to the model.
     if (isFileHistorySnapshotEntry(src)) {
       stats.droppedEntryCount += 1;
       stats.bytesSaved += Buffer.byteLength(JSON.stringify(src), "utf8");
@@ -117,8 +130,7 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
       toolUseById,
       origSessionId: opts.origSessionId,
       ambixCmd,
-      maxFieldBytes,
-      previewChars,
+      condenseOpts,
       stats,
     });
     if (xml !== null) {
@@ -127,7 +139,6 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
     }
   }
 
-  // Build the single bundled user-message.
   const bundledContent = buildBundledContent({
     origSessionId: opts.origSessionId,
     preservedFirstIx,
@@ -155,9 +166,6 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
   emitted.push(bundledEntry);
   prevUuid = bundledEntry.uuid as string;
 
-  // Pass-through Task* entries from the condensed range. Rewrite uuid and
-  // parentUuid chain but leave everything else verbatim — CC needs the
-  // Task*Create / TaskUpdate payloads unaltered to reconstruct task state.
   for (const src of taskThroughputSources) {
     const rewritten = rewritePreservedEntry({
       source: src,
@@ -169,7 +177,6 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
     if (rewritten.hasUuid) prevUuid = rewritten.entry.uuid as string;
   }
 
-  // Preserved tail — verbatim.
   for (let ix = preservedFirstIx; ix < entries.length; ix++) {
     const src = entries[ix];
     const rewritten = rewritePreservedEntry({
@@ -209,16 +216,9 @@ function buildToolUseIndex(entries: ReadonlyArray<LogEntry>): Map<string, ToolUs
 }
 
 /**
- * Classify an entry for bundled-mode dispatch. We preserve entries whole
- * when they carry a Task* payload CC needs to replay on resume; otherwise
- * they go into the bundled summary.
- *
- * "Mixed" entries — those that pair a Task* block with non-Task content in
- * the same entry — are preserved whole (can't safely split a single entry
- * across the bundle/post-bundle boundary without breaking CC's parentUuid
- * expectations). The non-Task content slips through verbatim; callers get
- * a `mixedPreservedEntryCount` stat so we can detect and fix if it
- * becomes a real source of bloat in practice.
+ * Classify an entry for bundled-mode dispatch. Task* payloads pass through
+ * verbatim so CC can replay them on resume; mixed entries (Task* + other
+ * blocks) are preserved whole and tracked via mixedPreservedEntryCount.
  */
 function classifyForBundling(
   src: LogEntry,
@@ -231,10 +231,8 @@ function classifyForBundling(
       if (isToolUseBlock(block)) {
         if (shouldPreserveTool(block.name)) hasPreserved = true;
         else hasOther = true;
-      } else if (isTextBlock(block)) {
-        // Text adjacent to a Task* tool_use is expected and conversational;
-        // only count OTHER tool_use blocks as a mixed signal.
       }
+      // text blocks are conversational, not a "mixed" signal
     }
     return { preserve: hasPreserved, mixed: hasPreserved && hasOther };
   }
@@ -249,8 +247,6 @@ function classifyForBundling(
         if (info && shouldPreserveTool(info.name)) hasPreserved = true;
         else hasOther = true;
       } else if (isTextBlock(block)) {
-        // Plain text in a user tool_result entry is unusual; treat as other
-        // so mixed-entry reporting flags it for inspection.
         hasOther = true;
       }
     }
@@ -263,16 +259,14 @@ interface TurnContext {
   toolUseById: Map<string, ToolUseInfo>;
   origSessionId: string;
   ambixCmd: string;
-  maxFieldBytes: number;
-  previewChars: number;
+  condenseOpts: { maxFieldBytes: number; previewChars: number };
   stats: CompactSessionStats;
 }
 
 function renderTurn(src: LogEntry, ix: number, ctx: TurnContext): string | null {
   if (isAssistantEntry(src)) return renderAssistantTurn(src, ix, ctx);
   if (isUserEntry(src)) return renderUserTurn(src, ix, ctx);
-  // system / summary / unknown — skip; these rarely carry agent-relevant
-  // context and the original file is still reachable via ambix query.
+  // system / summary / unknown — skip; original reachable via `ambix query`.
   return null;
 }
 
@@ -284,12 +278,13 @@ function renderAssistantTurn(
   const parts: string[] = [];
   for (const block of src.message.content) {
     if (isTextBlock(block)) {
-      if (typeof block.text === "string") parts.push(shrinkText(block.text, ix, ctx));
+      if (typeof block.text === "string") {
+        parts.push(renderTextBlock(block.text, ix, ctx));
+      }
     } else if (isToolUseBlock(block)) {
-      const summary = condenseToolUse(block.name, block.input, null);
-      parts.push(
-        `<tool_use name="${escapeXmlAttr(block.name)}">${escapeXmlText(summary)}</tool_use>`
-      );
+      const condensed = condenseToolInput(block.name, block.input, null, ctx.condenseOpts);
+      recordToolUseStats(condensed, block.input, ctx.stats);
+      parts.push(renderToolUseXml(block, ix, condensed));
     }
     // thinking / image — skip
   }
@@ -304,9 +299,8 @@ function renderUserTurn(
 ): string {
   const content = src.message.content;
 
-  // Simple string content — plain user text.
   if (typeof content === "string") {
-    return `<turn ix="${ix}" kind="user">\n${shrinkText(content, ix, ctx)}\n</turn>`;
+    return `<turn ix="${ix}" kind="user">\n${renderTextBlock(content, ix, ctx)}\n</turn>`;
   }
   if (!Array.isArray(content)) {
     return `<turn ix="${ix}" kind="user"/>`;
@@ -316,9 +310,9 @@ function renderUserTurn(
   const toolResultParts: string[] = [];
   for (const block of content) {
     if (isTextBlock(block)) {
-      if (typeof block.text === "string") textParts.push(shrinkText(block.text, ix, ctx));
+      if (typeof block.text === "string") textParts.push(renderTextBlock(block.text, ix, ctx));
     } else if (isToolResultBlock(block)) {
-      toolResultParts.push(renderToolResultBlock(block, ix, ctx));
+      toolResultParts.push(renderToolResultPart(block, ix, ctx));
     }
   }
 
@@ -332,75 +326,71 @@ function renderUserTurn(
   return `<turn ix="${ix}" kind="user">\n${combined}\n</turn>`;
 }
 
-function renderToolResultBlock(block: ToolResultBlock, ix: number, ctx: TurnContext): string {
+/**
+ * Render a user or assistant text block. Conversational text is preserved
+ * verbatim (no cap) unless it exceeds a generous sanity threshold — in
+ * which case we emit a `<truncated_text>` element with preview body and a
+ * `bytes` attribute so the shape is distinguishable from CC's harness
+ * display truncation.
+ */
+function renderTextBlock(text: string, ix: number, ctx: TurnContext): string {
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes <= TEXT_BLOCK_SANITY_CAP_BYTES) {
+    return escapeXmlText(text);
+  }
+  ctx.stats.truncatedInputFieldCount += 1;
+  const preview =
+    ctx.condenseOpts.previewChars > 0 ? text.slice(0, ctx.condenseOpts.previewChars) : "";
+  const body = preview ? `${escapeXmlText(preview)}…` : "";
+  const tag = `<truncated_text bytes="${bytes}" ix="${ix}">${body}</truncated_text>`;
+  ctx.stats.bytesSaved += Math.max(0, bytes - Buffer.byteLength(tag, "utf8"));
+  return tag;
+}
+
+function renderToolResultPart(block: ToolResultBlock, ix: number, ctx: TurnContext): string {
   const use = ctx.toolUseById.get(block.tool_use_id);
   const name = use?.name ?? "unknown";
-  const summary = condenseToolUse(name, use?.input ?? {}, block);
+  const condensed = condenseToolInput(name, use?.input ?? {}, block, ctx.condenseOpts);
   ctx.stats.stubbedToolResultCount += 1;
-  const rawLen = Buffer.byteLength(toolResultText(block), "utf8");
-  const savings = Math.max(0, rawLen - Buffer.byteLength(summary, "utf8"));
-  ctx.stats.bytesSaved += savings;
-  const errAttr = block.is_error ? ' is_error="true"' : "";
-  return `<tool_result name="${escapeXmlAttr(name)}"${errAttr}>${escapeXmlText(summary)}</tool_result>`;
+  const rawLen = rawToolResultBytes(block);
+  const rendered = renderToolResultXml(block, ix, name, condensed.resultSummary);
+  ctx.stats.bytesSaved += Math.max(0, rawLen - Buffer.byteLength(rendered, "utf8"));
+  return rendered;
 }
 
-function shrinkText(text: string, ix: number, ctx: TurnContext): string {
-  const bytes = Buffer.byteLength(text, "utf8");
-  if (bytes <= ctx.maxFieldBytes) return escapeXmlText(text);
-
-  ctx.stats.truncatedInputFieldCount += 1;
-  const preview = ctx.previewChars > 0 ? text.slice(0, ctx.previewChars) : "";
-  const marker = `[COMPACTION STUB — ${bytes} bytes removed. Retrieve via: ${ctx.ambixCmd} ${ctx.origSessionId} ${ix}]`;
-  const body = preview
-    ? `<truncated>\n${escapeXmlText(preview)}…\n</truncated>\n${escapeXmlText(marker)}`
-    : escapeXmlText(marker);
-  ctx.stats.bytesSaved += Math.max(0, bytes - Buffer.byteLength(body, "utf8"));
-  return body;
+function recordToolUseStats(
+  condensed: CondensedToolInput,
+  originalInput: unknown,
+  stats: CompactSessionStats
+): void {
+  for (const field of condensed.fields) {
+    if (field.kind === "truncated") {
+      stats.truncatedInputFieldCount += 1;
+    }
+  }
+  if (originalInput === null || originalInput === undefined) return;
+  const origBytes = Buffer.byteLength(JSON.stringify(originalInput), "utf8");
+  // The per-field rendering's post-bytes are hard to predict cheaply here;
+  // approximate by counting only the sum of replaced field sizes. Fine for
+  // a stats counter that's advisory, not authoritative.
+  let saved = 0;
+  for (const field of condensed.fields) {
+    if (field.kind === "truncated") {
+      saved += Math.max(0, field.origBytes - field.preview.length - 32 /* tag overhead */);
+    }
+  }
+  if (saved > 0) stats.bytesSaved += Math.min(saved, origBytes);
 }
 
-// Minimal XML escape — the turn content is embedded inside a broader XML
-// envelope, so reserved chars must be escaped. We're deliberately permissive
-// (don't escape quotes in body text) to keep the output readable.
-//
-// XML 1.0 (§2.2) restricts the legal character set. In text content:
-//   - U+0009, U+000A, U+000D are allowed
-//   - U+0000..U+0008, U+000B, U+000C, U+000E..U+001F are forbidden
-//   - U+FFFE and U+FFFF are forbidden noncharacters
-//   - Unpaired surrogates (U+D800..U+DFFF) are forbidden
-// Tool output sometimes smuggles control bytes through (ANSI sequences in
-// streamed Bash output, NULs in binary-adjacent stdout) and poorly-encoded
-// text can carry lone surrogates. Strip the whole illegal set so the
-// outer `<turns>` block stays parseable by any conforming XML consumer.
-// Losing these chars is safe — they're not meaningful in a text summary.
-// Built via `new RegExp()` with the ranges as a JS string so the literal
-// control points sit in a plain string rather than a regex literal — dodges
-// biome's "control char in regex" rule without a per-char ignore.
-const XML_ILLEGAL_RE = new RegExp(
-  [
-    // C0 controls except \t (U+0009), \n (U+000A), \r (U+000D)
-    "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFE\\uFFFF]",
-    // High-surrogate not followed by a low-surrogate
-    "[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])",
-    // Low-surrogate not preceded by a high-surrogate
-    "(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]",
-  ].join("|"),
-  "g"
-);
-
-function stripIllegalControl(s: string): string {
-  return s.replace(XML_ILLEGAL_RE, "");
+function rawToolResultBytes(block: ToolResultBlock): number {
+  if (typeof block.content === "string") return Buffer.byteLength(block.content, "utf8");
+  if (Array.isArray(block.content)) return Buffer.byteLength(JSON.stringify(block.content), "utf8");
+  return 0;
 }
 
-function escapeXmlText(s: string): string {
-  return stripIllegalControl(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-function escapeXmlAttr(s: string): string {
-  return stripIllegalControl(s)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+// ---------------------------------------------------------------------------
+// Preamble + bundled-entry construction
+// ---------------------------------------------------------------------------
 
 function buildBundledContent(args: {
   origSessionId: string;
@@ -421,6 +411,10 @@ function buildBundledContent(args: {
       `Turns 0–${args.preservedFirstIx - 1} were condensed into the \`<turns>\` block below.`,
       `Each \`<turn ix="N">\` summarizes ONE source entry. To retrieve the original content`,
       `of turn N, run: \`${args.ambixCmd} ${args.origSessionId} N\` (substitute the ix).`,
+      "",
+      "Condensed tool_use inputs use per-tool XML with `<field>value</field>` children.",
+      `Fields marked \`truncated="<bytes>"\` carry a short preview ending in \`…\` followed`,
+      "by the original byte count — the real value is rehydratable via the command above.",
       ""
     );
   }
@@ -437,7 +431,7 @@ function buildBundledContent(args: {
     );
   }
   preamble.push(
-    "Do NOT infer or guess what a condensed turn contained — the prose is a summary, not the real payload. Run the embedded command when you need the actual content.",
+    "Do NOT infer or guess what a condensed turn contained — the XML here is a structured summary, not the real tool invocation. Run the rehydration command when you need actual content.",
     "",
     "Continue the conversation from where it left off.",
     "</ambix-compaction-marker>",
@@ -481,8 +475,7 @@ function buildBundledEntry(args: {
 
 /**
  * Find the ix where the preserved tail begins. Reuses brief/groupIntoRounds
- * so structural and bundled modes draw the boundary at the same place —
- * subtle divergences here would surface as surprising --full-recent behavior.
+ * so structural and bundled modes draw the boundary at the same place.
  */
 function computePreservedFirstIx(entries: ReadonlyArray<LogEntry>, fullRecent: number): number {
   if (fullRecent <= 0 || entries.length === 0) return entries.length;
@@ -491,4 +484,26 @@ function computePreservedFirstIx(entries: ReadonlyArray<LogEntry>, fullRecent: n
   if (rounds.length === 0) return entries.length;
   const pickIdx = Math.max(0, rounds.length - fullRecent);
   return rounds[pickIdx].userIx;
+}
+
+// ---------------------------------------------------------------------------
+// XML escaping (for text-block bodies in the <turns> wrapper). Strips XML
+// 1.0-illegal code points + escapes reserved chars.
+// ---------------------------------------------------------------------------
+
+const XML_ILLEGAL_RE = new RegExp(
+  [
+    "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFE\\uFFFF]",
+    "[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])",
+    "(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]",
+  ].join("|"),
+  "g"
+);
+
+function stripIllegalControl(s: string): string {
+  return s.replace(XML_ILLEGAL_RE, "");
+}
+
+function escapeXmlText(s: string): string {
+  return stripIllegalControl(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
