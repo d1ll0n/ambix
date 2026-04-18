@@ -378,6 +378,15 @@ async function runCompact(args: string[]): Promise<number> {
     console.error(
       "  --preview-chars N     keep first N chars of truncated fields as preview (default: 100, 0 disables)"
     );
+    console.error("  --preserve <kind>:<pattern>");
+    console.error("                        preserve matching entries verbatim (repeatable).");
+    console.error("                        tool:<glob>   — matched tool_use/tool_result render");
+    console.error("                                        verbatim inside the bundled summary");
+    console.error("                                        (no truncation, real result bodies)");
+    console.error("                        type:<glob>   — matched entries pass through as real");
+    console.error("                                        JSONL entries (like Task* entries do)");
+    console.error("                        glob: * matches any sequence, ? matches one char;");
+    console.error("                        case-sensitive whole-name match.");
     console.error("  --output <path>       override destination path");
     console.error("  --dry-run             print the plan without writing");
     return 0;
@@ -420,6 +429,7 @@ async function runCompact(args: string[]): Promise<number> {
   }
   const output = parseFlag(args, "--output");
   const dryRun = args.includes("--dry-run");
+  const preserveSelectors = parseRepeatedFlag(args, "--preserve");
 
   let sessionPath: string;
   try {
@@ -430,15 +440,33 @@ async function runCompact(args: string[]): Promise<number> {
   }
 
   const session = new Session(sessionPath);
-  const result = await compactSession(session, {
-    fullRecent,
-    output,
-    dryRun,
-    maxFieldBytes,
-    previewChars,
-  });
+  let result: Awaited<ReturnType<typeof compactSession>>;
+  try {
+    result = await compactSession(session, {
+      fullRecent,
+      output,
+      dryRun,
+      maxFieldBytes,
+      previewChars,
+      preserveSelectors,
+    });
+  } catch (err) {
+    // Surface selector-parse errors (and any other call-time failures)
+    // with the `ambix compact:` prefix so the user sees which subcommand
+    // rejected their flags.
+    console.error(`ambix compact: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
 
   const prefix = result.dryRun ? "[dry-run] would write" : "wrote";
+  const preservedBits: string[] = [];
+  if (result.stats.userPreservedToolCount > 0) {
+    preservedBits.push(`${result.stats.userPreservedToolCount} user-preserved tool calls`);
+  }
+  if (result.stats.userPreservedTypeCount > 0) {
+    preservedBits.push(`${result.stats.userPreservedTypeCount} user-preserved type entries`);
+  }
+  const preservedSuffix = preservedBits.length > 0 ? `, ${preservedBits.join(", ")}` : "";
   console.error(
     `${prefix} compacted session to ${result.destPath} ` +
       `(${result.stats.sourceEntryCount} source → ` +
@@ -446,7 +474,7 @@ async function runCompact(args: string[]): Promise<number> {
       `${result.stats.preservedEntryCount} preserved + ` +
       `${result.stats.droppedEntryCount} dropped, ` +
       `${result.stats.stubbedToolResultCount} tool_result stubs, ` +
-      `${result.stats.truncatedInputFieldCount} fields truncated, ` +
+      `${result.stats.truncatedInputFieldCount} fields truncated${preservedSuffix}, ` +
       `~${result.stats.bytesSaved} bytes saved)`
   );
   if (result.copiedTasksDir) {
@@ -470,6 +498,15 @@ function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
   return args[idx + 1];
+}
+
+/** Collect every occurrence of `--name value`. Useful for repeatable flags. */
+function parseRepeatedFlag(args: string[], name: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length - 1; i++) {
+    if (args[i] === name && args[i + 1] !== undefined) out.push(args[i + 1]);
+  }
+  return out;
 }
 
 function printUsage(): void {

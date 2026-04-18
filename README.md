@@ -46,6 +46,8 @@ Emits a new session file Claude Code's `/resume` picks up in the source's projec
 
 Typical session sizes compact to ~3-10% of source. Alternative to CC's built-in `/compact` when you want a structured navigable history rather than a narrative summary.
 
+**`--preserve <kind>:<pattern>`** (repeatable) exempts matching content from condensation. Two kinds: `tool:<glob>` keeps matching tool_use/tool_result entries verbatim inside the bundled summary; `type:<glob>` promotes matching entries to real JSONL pass-through. Primary use case: a tool that IS the conversation channel (e.g., an MCP Telegram plugin) — without `--preserve 'tool:mcp__telegram__*'`, the compacted session would summarize away your actual messages.
+
 **Known limitation:** CC's "restore conversation and code" rewind relies on `file-history-snapshot` entries, which ambix drops from the condensed range to save bytes. Rewind-with-code from a compacted session can only reach into the preserved tail; code state before that is only recoverable via `ambix query` + manual file edits.
 
 ### Subcommands

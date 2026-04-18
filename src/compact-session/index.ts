@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { type Session, defaultTasksDir } from "parse-cc";
 import { emitBundled } from "./bundled.js";
+import { parseSelector } from "./preserve-selector.js";
 import { copyTasksDir } from "./tasks.js";
 import type { CompactSessionOptions, CompactSessionResult } from "./types.js";
 
@@ -50,6 +51,10 @@ export async function compactSession(
     tasksBase,
   });
 
+  // Parse user --preserve selectors once per call. Invalid ones throw with
+  // a user-friendly message before we touch the filesystem.
+  const preserveSelectors = (opts.preserveSelectors ?? []).map(parseSelector);
+
   // Bundled is the only shipped mode. Structural emitter is parked under
   // `_experimental/structural/` — see that directory's DEPRECATED.md for why.
   const { entries: emitted, stats } = emitBundled({
@@ -62,6 +67,7 @@ export async function compactSession(
     version,
     maxFieldBytes: opts.maxFieldBytes,
     previewChars: opts.previewChars,
+    preserveSelectors,
   });
 
   let copiedTasksDir: string | null = null;

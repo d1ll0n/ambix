@@ -87,6 +87,7 @@ ambix compact <session-path-or-id> [--full-recent N] [--max-field-bytes N]
 | `--full-recent N` | `10` | Rounds preserved verbatim at the tail |
 | `--max-field-bytes N` | `500` | Truncate any condensed string field above this UTF-8 byte count |
 | `--preview-chars N` | `100` | Chars of the original kept as preview inside the truncation marker (`0` disables the preview) |
+| `--preserve <kind>:<pattern>` | (none) | Preserve matching entries verbatim. Repeatable. See Preserve selectors below. |
 | `--output <path>` | `~/.claude/projects/<source-slug>/<new-uuid>.jsonl` | Destination path |
 | `--dry-run` | off | Print the plan and stats without writing |
 
@@ -114,6 +115,33 @@ Each `<tool_use>` inside the bundled message has per-tool element children (`<fi
 Conversational user/assistant text blocks pass through verbatim (no `--max-field-bytes` cap — only a 16 KB sanity clamp for truly unreasonable blocks, which becomes `<truncated_text bytes="N" ix="M">preview…</truncated_text>`).
 
 **Task* sidecar pass-through.** `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_use entries and their matched tool_result entries pass through verbatim as real JSONL entries (not summarized into the bundled XML). CC replays these on resume to rebuild its live task list; redacting or restructuring them would break task-state restoration.
+
+**Preserve selectors.** `--preserve <kind>:<pattern>` exempts matching entries from condensation. Repeatable. Two kinds supported:
+
+| Kind | Matches | Effect |
+|---|---|---|
+| `tool:<glob>` | tool_use.name (on assistant entries) or the tool_name of a tool_result (via tool_use_id lookup) | Entry stays inside the bundled `<turns>` block; tool_use input fields pass through verbatim (no truncation); tool_result renders with the real `block.content` as body instead of the condenser one-liner |
+| `type:<glob>` | parse-cc's `entry.type` field | The whole entry passes through as a real JSONL entry, exactly like Task* entries do — parentUuid rewired, routing IDs regenerated, payload untouched |
+
+Glob: `*` matches any sequence, `?` matches one char. Case-sensitive, whole-name match.
+
+```bash
+# Preserve an MCP telegram plugin's tool calls (so the resumed agent sees the
+# actual messages, not "sent — message_id 42" summaries):
+ambix compact <session> --preserve 'tool:mcp__plugin_telegram__*'
+
+# Preserve file-history-snapshot entries (default behavior drops them; override
+# to keep CC rewind-with-code functional for the condensed range):
+ambix compact <session> --preserve 'type:file-history-snapshot'
+
+# Combine:
+ambix compact <session> \
+  --preserve 'tool:mcp__plugin_telegram__*' \
+  --preserve 'tool:mcp__plugin_slack__*' \
+  --preserve 'type:custom-title'
+```
+
+When any `--preserve` selectors are active, the bundled message's preamble tells the resumed agent which patterns to expect so it knows preserved content is real (not a stub to rehydrate).
 
 **Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary (entry counts, truncation stats, bytes saved) is printed to stderr.
 

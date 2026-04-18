@@ -98,6 +98,8 @@ export function emit(opts: EmitOptions): EmitResult {
     // Bundled-mode-only counters; always 0 in structural mode.
     bundledTurnCount: 0,
     mixedPreservedEntryCount: 0,
+    userPreservedToolCount: 0,
+    userPreservedTypeCount: 0,
   };
 
   const emitted: Record<string, unknown>[] = [];

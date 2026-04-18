@@ -17,6 +17,7 @@
 
 import type { ToolResultBlock } from "parse-cc";
 import { condenseToolUse } from "../brief/condensers.js";
+import { type PreserveSelector, matchesToolSelector } from "./preserve-selector.js";
 import { PRESERVE_TOOLS } from "./preserve-tools.js";
 
 /** One field inside a condensed tool_use.input. */
@@ -40,6 +41,12 @@ export interface CondenseInputOpts {
   maxFieldBytes: number;
   /** Number of chars of the original kept as a preview (0 = marker-only). */
   previewChars: number;
+  /**
+   * User-supplied `--preserve tool:<glob>` selectors. If a tool name matches
+   * any, ALL of its input fields pass through verbatim (no truncation) —
+   * same branch PRESERVE_TOOLS takes for Task*. Defaults to no matching.
+   */
+  userPreserveSelectors?: ReadonlyArray<PreserveSelector>;
 }
 
 /** Top-level dispatcher. Picks a per-tool handler or falls back to generic. */
@@ -55,6 +62,14 @@ export function condenseToolInput(
   // PRESERVE_TOOLS: pass every field through verbatim. CC reads these on
   // resume to rebuild task state; we MUST NOT redact anything.
   if (PRESERVE_TOOLS.has(name)) {
+    return { fields: allVerbatim(inp), resultSummary };
+  }
+
+  // User `--preserve tool:<glob>` selectors: same verbatim treatment, but
+  // only triggered by explicit user opt-in. Used for tools that carry
+  // primary user-visible content (e.g. an MCP telegram plugin whose
+  // tool_use inputs ARE the messages between user + agent).
+  if (opts.userPreserveSelectors && matchesToolSelector(name, opts.userPreserveSelectors)) {
     return { fields: allVerbatim(inp), resultSummary };
   }
 

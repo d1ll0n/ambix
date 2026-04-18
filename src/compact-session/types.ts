@@ -40,6 +40,16 @@ export interface CompactSessionOptions {
    * 0 to disable previews. Default: 100.
    */
   previewChars?: number;
+  /**
+   * User-supplied `--preserve <kind>:<pattern>` selectors. Each string is
+   * parsed once at call time; invalid selectors throw.
+   *
+   * - `tool:<glob>` — matched tool_use/tool_result keep fields + body
+   *   verbatim inside the bundled XML (no truncation).
+   * - `type:<glob>` — matched entries promote to real JSONL pass-through
+   *   (like Task* entries).
+   */
+  preserveSelectors?: ReadonlyArray<string>;
 }
 
 /** Result of a compact-session run. */
@@ -95,6 +105,19 @@ export interface CompactSessionStats {
    * common enough to warrant block-level splitting.
    */
   mixedPreservedEntryCount: number;
+  /**
+   * Tool_use / tool_result blocks rendered verbatim because their tool name
+   * matched a user `--preserve tool:<glob>` selector. Counts both the
+   * tool_use (field-level verbatim) AND the matching tool_result (body
+   * rendered from block.content instead of the condenser summary).
+   */
+  userPreservedToolCount: number;
+  /**
+   * Entries promoted to real JSONL pass-through because their entry.type
+   * matched a user `--preserve type:<glob>` selector (e.g.
+   * `type:file-history-snapshot` or `type:custom-title`).
+   */
+  userPreservedTypeCount: number;
   /**
    * Rough bytes removed (sum of original content sizes minus replacement
    * sizes, across tool_result stubs and tool_use input truncations).

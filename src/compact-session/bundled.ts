@@ -34,9 +34,15 @@ import {
   isToolUseBlock,
   isUserEntry,
 } from "parse-cc";
+import { toolResultText } from "../brief/condensers.js";
 import { groupIntoRounds } from "../brief/rounds.js";
 import { type CondensedToolInput, condenseToolInput } from "./condense-input.js";
 import { rewritePreservedEntry } from "./emit-shared.js";
+import {
+  type PreserveSelector,
+  matchesToolSelector,
+  matchesTypeSelector,
+} from "./preserve-selector.js";
 import { shouldPreserveTool } from "./preserve-tools.js";
 import { renderToolResultXml, renderToolUseXml } from "./render-bundled-xml.js";
 import { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS } from "./tuning.js";
@@ -73,6 +79,13 @@ export interface EmitBundledOptions {
   maxFieldBytes?: number;
   /** Preview chars kept in front of the truncation marker. */
   previewChars?: number;
+  /**
+   * User-supplied `--preserve <kind>:<pattern>` selectors. `tool:` matches
+   * preserve tool_use/tool_result content verbatim inside the bundled XML;
+   * `type:` matches promote the entry to a real JSONL pass-through (like
+   * Task*). Empty/undefined means no user preservation.
+   */
+  preserveSelectors?: ReadonlyArray<PreserveSelector>;
 }
 
 export interface EmitBundledResult {
@@ -87,6 +100,7 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
   const ambixCmd = opts.ambixCmd ?? "ambix query";
   const maxFieldBytes = opts.maxFieldBytes ?? DEFAULT_MAX_FIELD_BYTES;
   const previewChars = opts.previewChars ?? DEFAULT_PREVIEW_CHARS;
+  const preserveSelectors: ReadonlyArray<PreserveSelector> = opts.preserveSelectors ?? [];
 
   // Index tool_use by id so we can render `<tool_result>` with the correct
   // tool name (the result block itself only carries tool_use_id).
@@ -102,20 +116,40 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
     bytesSaved: 0,
     bundledTurnCount: 0,
     mixedPreservedEntryCount: 0,
+    userPreservedToolCount: 0,
+    userPreservedTypeCount: 0,
   };
 
   // Pass 1: walk the condensed range, building the prose turn list AND
-  // the list of Task* entries to pass through verbatim.
+  // the list of entries promoted to real JSONL pass-through (Task* + any
+  // user `type:` selector matches).
   const turnXmlLines: string[] = [];
   const taskThroughputSources: LogEntry[] = [];
-  const condenseOpts = { maxFieldBytes, previewChars };
+  const condenseOpts = {
+    maxFieldBytes,
+    previewChars,
+    userPreserveSelectors: preserveSelectors,
+  };
 
   for (let ix = 0; ix < preservedFirstIx; ix++) {
     const src = entries[ix];
 
     if (isFileHistorySnapshotEntry(src)) {
+      // User `type:file-history-snapshot` selector override — keep them.
+      if (matchesTypeSelector(src.type, preserveSelectors)) {
+        taskThroughputSources.push(src);
+        stats.userPreservedTypeCount += 1;
+        continue;
+      }
       stats.droppedEntryCount += 1;
       stats.bytesSaved += Buffer.byteLength(JSON.stringify(src), "utf8");
+      continue;
+    }
+
+    // User `type:<glob>` selector — entry-level pass-through as real JSONL.
+    if (matchesTypeSelector(src.type, preserveSelectors)) {
+      taskThroughputSources.push(src);
+      stats.userPreservedTypeCount += 1;
       continue;
     }
 
@@ -131,6 +165,7 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
       origSessionId: opts.origSessionId,
       ambixCmd,
       condenseOpts,
+      preserveSelectors,
       stats,
     });
     if (xml !== null) {
@@ -147,6 +182,9 @@ export function emitBundled(opts: EmitBundledOptions): EmitBundledResult {
     hasPreservedTools: taskThroughputSources.length > 0,
     turnXmlLines,
     ambixCmd,
+    userPreserveSelectors: preserveSelectors,
+    userPreservedToolCount: stats.userPreservedToolCount,
+    userPreservedTypeCount: stats.userPreservedTypeCount,
   });
 
   const emitted: Record<string, unknown>[] = [];
@@ -259,7 +297,12 @@ interface TurnContext {
   toolUseById: Map<string, ToolUseInfo>;
   origSessionId: string;
   ambixCmd: string;
-  condenseOpts: { maxFieldBytes: number; previewChars: number };
+  condenseOpts: {
+    maxFieldBytes: number;
+    previewChars: number;
+    userPreserveSelectors?: ReadonlyArray<PreserveSelector>;
+  };
+  preserveSelectors: ReadonlyArray<PreserveSelector>;
   stats: CompactSessionStats;
 }
 
@@ -283,7 +326,11 @@ function renderAssistantTurn(
       }
     } else if (isToolUseBlock(block)) {
       const condensed = condenseToolInput(block.name, block.input, null, ctx.condenseOpts);
-      recordToolUseStats(condensed, block.input, ctx.stats);
+      if (matchesToolSelector(block.name, ctx.preserveSelectors)) {
+        ctx.stats.userPreservedToolCount += 1;
+      } else {
+        recordToolUseStats(condensed, block.input, ctx.stats);
+      }
       parts.push(renderToolUseXml(block, ix, condensed));
     }
     // thinking / image — skip
@@ -350,6 +397,17 @@ function renderTextBlock(text: string, ix: number, ctx: TurnContext): string {
 function renderToolResultPart(block: ToolResultBlock, ix: number, ctx: TurnContext): string {
   const use = ctx.toolUseById.get(block.tool_use_id);
   const name = use?.name ?? "unknown";
+  // User-preserved tools: render the tool_result body verbatim (flattened
+  // from block.content, XML-escaped + control-stripped by renderToolResultXml)
+  // instead of the condenser one-liner. These are tool calls the user wants
+  // the resumed agent to see in full, e.g. an MCP telegram plugin where the
+  // tool_result IS the agent↔user conversation.
+  const preserved = matchesToolSelector(name, ctx.preserveSelectors);
+  if (preserved) {
+    const body = toolResultText(block);
+    ctx.stats.userPreservedToolCount += 1;
+    return renderToolResultXml(block, ix, name, body);
+  }
   const condensed = condenseToolInput(name, use?.input ?? {}, block, ctx.condenseOpts);
   ctx.stats.stubbedToolResultCount += 1;
   const rawLen = rawToolResultBytes(block);
@@ -400,6 +458,9 @@ function buildBundledContent(args: {
   hasPreservedTools: boolean;
   turnXmlLines: string[];
   ambixCmd: string;
+  userPreserveSelectors: ReadonlyArray<PreserveSelector>;
+  userPreservedToolCount: number;
+  userPreservedTypeCount: number;
 }): string {
   const preamble: string[] = [
     "<ambix-compaction-marker>",
@@ -421,6 +482,29 @@ function buildBundledContent(args: {
   if (args.hasPreservedTools) {
     preamble.push(
       "Task-management tool calls (TaskCreate / TaskUpdate / …) are preserved verbatim as real entries immediately after this message. This lets CC rebuild its live task list on resume.",
+      ""
+    );
+  }
+  if (args.userPreserveSelectors.length > 0) {
+    // Let the resumed agent distinguish verbatim user-preserved content
+    // from the default condensed summaries — otherwise it might treat a
+    // real telegram message body as a stub and try to rehydrate it.
+    const toolPatterns = args.userPreserveSelectors
+      .filter((s) => s.kind === "tool")
+      .map((s) => `tool:${s.pattern.source.slice(1, -1)}`);
+    const typePatterns = args.userPreserveSelectors
+      .filter((s) => s.kind === "type")
+      .map((s) => `type:${s.pattern.source.slice(1, -1)}`);
+    preamble.push(
+      "Per --preserve flags, these selectors pass through verbatim:",
+      ...toolPatterns.map(
+        (p) =>
+          `  - ${p}  (matching <tool_use> keeps fields uncapped; <tool_result> body is the real response, not a summary)`
+      ),
+      ...typePatterns.map(
+        (p) => `  - ${p}  (matching entries emitted as real JSONL, not rendered into <turns>)`
+      ),
+      `Active matches in this compaction: ${args.userPreservedToolCount} tool calls, ${args.userPreservedTypeCount} entries.`,
       ""
     );
   }

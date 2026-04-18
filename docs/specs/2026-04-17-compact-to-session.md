@@ -47,16 +47,40 @@ Validated via three `/resume` smoke tests on 2026-04-17 — the final one uses p
 ## User-facing CLI
 
 ```
-ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]
+ambix compact <session-path-or-id> [--full-recent N] [--max-field-bytes N]
+                                   [--preview-chars N] [--preserve <kind>:<pattern>]
+                                   [--output <path>] [--dry-run]
 ```
 
 | Flag | Default | Behavior |
 |---|---|---|
 | `--full-recent N` | `10` | Preserve the last N rounds verbatim (each round = one user turn + the assistant turns + tool pairs following it, up to the next user turn). Everything before gets condensed. |
+| `--max-field-bytes N` | `500` | Truncate any condensed string field above this UTF-8 byte count. |
+| `--preview-chars N` | `100` | Preview length in truncated fields (`0` disables preview). |
+| `--preserve <kind>:<pattern>` | (none) | Preserve matching entries verbatim. Repeatable. `tool:<glob>` keeps tool_use fields + tool_result body uncapped inside the bundled XML; `type:<glob>` promotes matching entries to real JSONL pass-through. See §Preserve selectors. |
 | `--output <path>` | `~/.claude/projects/<source-slug>/<new-uuid>.jsonl` | Override destination. |
 | `--dry-run` | off | Print the plan (entry counts, byte savings estimate) and exit without writing. |
 
 On success, prints the new session UUID and destination path to stdout.
+
+### Preserve selectors
+
+Use case: a tool call *is* the primary user-visible content (e.g. an MCP Telegram/Slack plugin whose tool_use is the outgoing message). Default condensation would summarize the call to a one-liner and lose the actual conversation. `--preserve 'tool:mcp__plugin_telegram__*'` keeps those calls verbatim inside the bundled summary.
+
+**Two selector kinds:**
+
+- `tool:<glob>` — matched via tool_use.name (on assistant entries) or the matched tool_use's name for a tool_result (via tool_use_id lookup). Effect: entry stays inside the bundled `<turns>` block; tool_use fields pass verbatim; tool_result body is the real response, not the condenser summary.
+- `type:<glob>` — matches parse-cc's `entry.type`. Effect: entry promotes to real JSONL pass-through (same path Task* entries take).
+
+**Glob syntax:** `*` matches any sequence (including empty), `?` matches one char. Case-sensitive whole-name match. Reserved regex metacharacters in the pattern are escaped literally, so `file.ext` matches only `file.ext` (not `fileXext`).
+
+**Matcher lives in:** `src/compact-session/preserve-selector.ts` (parser + glob→regex). Selectors are parsed once at `compactSession()` call time; invalid selectors throw with a user-facing message before any disk I/O.
+
+**Preamble awareness.** When selectors are active, the bundled user-message's preamble lists them with a summary of what each does, so the resumed agent doesn't mistake verbatim user-preserved content for a stub it should rehydrate.
+
+### Extensibility
+
+Adding a new selector kind later (e.g. `subagent:<glob>` for Task invocations keyed on `input.subagent_type`, or `content:<pattern>` for text-content matching) means: one branch in `parseSelector`, one matcher function, one dispatch site. No breaking change for existing `tool:` / `type:` users.
 
 ## Renaming of existing `compact`
 

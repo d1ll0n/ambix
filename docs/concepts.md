@@ -136,6 +136,8 @@ ambix compact /path/to/session.jsonl --full-recent 10
 
 **Tasks sidecar snapshot.** CC keys per-session task state by session UUID (`~/.claude/tasks/<sessionId>/`). A fresh UUID by itself has no matching tasks dir, so `TaskCreate`/`TaskUpdate` reminders from the source would be lost. `ambix compact` deep-copies the source's tasks dir to the new session's, so the compacted session inherits the task state at compaction time. The two sessions are independent from that point on: subsequent task mutations on one side don't leak to the other, which matters if the source is later forked or continued.
 
+**User preserve selectors.** `--preserve <kind>:<pattern>` exempts matching content from condensation. `tool:<glob>` keeps the tool_use input fields + real tool_result body inside the bundled `<turns>` block (useful when a tool IS the user-visible channel — e.g., an MCP Telegram plugin whose tool_use *is* the outgoing message); `type:<glob>` promotes matching entries to real JSONL pass-through (like `type:file-history-snapshot` if you want CC rewind-with-code to work through the condensed range). Repeatable; glob is `*`/`?`/literal with case-sensitive whole-name matching. Active selectors are listed in the bundled message's preamble so the resumed agent knows preserved content isn't a stub.
+
 **Why this over `/compact`:** a resuming agent reads a structured summary with explicit rehydration commands — it can reason about turn boundaries via the `<tool_use>`/`<tool_result>` structure and reach for `ambix query` to pull the exact historical content of any condensed turn. Validated end-to-end against CC 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## Narrative schema
