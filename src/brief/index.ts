@@ -1,6 +1,6 @@
-// src/compact/index.ts
+// src/brief/index.ts
 //
-// Top-level entry point for the `ambix compact` subcommand. Produces
+// Top-level entry point for the `ambix brief` subcommand. Produces
 // a chronological, per-round summary of a Claude Code session with
 // condensed tool_use lines and rehydration indices — intended as a
 // context-recovery artifact that a new agent session can load in place
@@ -9,7 +9,7 @@
 import type { LogEntry, Session, ToolResultBlock } from "parse-cc";
 import { isAssistantEntry, isTextBlock, isToolUseBlock } from "parse-cc";
 import { estTokens } from "./condensers.js";
-import { type CompactFormat, renderCompact } from "./render.js";
+import { type BriefFormat, renderBrief } from "./render.js";
 import {
   type IndexedEntry,
   type Round,
@@ -18,12 +18,12 @@ import {
   isWrapperOnly,
 } from "./rounds.js";
 
-export interface CompactOptions {
+export interface BriefOptions {
   /** Output format. Default `"xml"`. */
-  format?: CompactFormat;
+  format?: BriefFormat;
 }
 
-export interface CompactStats {
+export interface BriefStats {
   /** Number of rounds rendered (wrapper-only rounds excluded). */
   rounds: number;
   /** Number of rounds before wrapper filtering. */
@@ -36,16 +36,13 @@ export interface CompactStats {
   entryCount: number;
 }
 
-export interface CompactResult {
+export interface BriefResult {
   content: string;
-  stats: CompactStats;
+  stats: BriefStats;
 }
 
-/** Produce a compact render for a single Claude Code session. */
-export async function compactSession(
-  session: Session,
-  opts: CompactOptions = {}
-): Promise<CompactResult> {
+/** Produce a brief (markdown or XML) render for a single Claude Code session. */
+export async function buildBrief(session: Session, opts: BriefOptions = {}): Promise<BriefResult> {
   const entries = await session.messages();
   const indexed: IndexedEntry[] = entries.map((entry, ix) => ({ entry, ix }));
   const allRounds = groupIntoRounds(indexed);
@@ -54,7 +51,7 @@ export async function compactSession(
   const stats = computeStats(entries, rounds, allRounds.length);
 
   const format = opts.format ?? "xml";
-  const content = renderCompact(format, rounds, resultsById, {
+  const content = renderBrief(format, rounds, resultsById, {
     source: session.path,
     totalRounds: stats.rounds,
     assistantTextTokens: stats.assistantTextTokens,
@@ -64,7 +61,7 @@ export async function compactSession(
   return { content, stats };
 }
 
-function computeStats(entries: LogEntry[], rounds: Round[], rawRounds: number): CompactStats {
+function computeStats(entries: LogEntry[], rounds: Round[], rawRounds: number): BriefStats {
   let toolUses = 0;
   let assistantTextTokens = 0;
   for (const entry of entries) {
@@ -88,7 +85,7 @@ function computeStats(entries: LogEntry[], rounds: Round[], rawRounds: number): 
   };
 }
 
-export type { CompactFormat };
+export type { BriefFormat };
 export type { Round };
 // Keep a handle exported so a consumer can reuse a cached tool_result index
 // across multiple renders if they ever need to (e.g. rendering both XML and

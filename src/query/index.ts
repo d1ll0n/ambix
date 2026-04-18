@@ -4,6 +4,7 @@ import path from "node:path";
 import { Session } from "parse-cc";
 import { resolveSessionPath as resolveGlobalSessionPath } from "../orchestrate/resolve.js";
 import { formatMatches } from "./format.js";
+import { renderEntry } from "./render-entry.js";
 import { queryShow } from "./show.js";
 import { queryTextSearch } from "./text-search.js";
 import { queryToolResults } from "./tool-results.js";
@@ -86,9 +87,18 @@ export async function runQuery(args: string[]): Promise<{ code: number; output: 
         return { code: 1, output: `show: invalid ix: ${ixStr}\n` };
       }
       const field = parseFlag(rest, "--field");
+      const raw = rest.includes("--raw");
       const result = await queryShow(session, { ix, field });
       if (result === undefined) return { code: 0, output: "" };
       if (typeof result === "string") return { code: 0, output: `${result}\n` };
+      // When no field is requested, default to type-aware rendering (strips
+      // CC's JSON envelope + unwraps text blocks with real newlines). `--raw`
+      // opts back into pretty-JSON for tooling that wants the full shape.
+      // A specific --field always returns the raw value — the caller asked
+      // for a path, don't second-guess.
+      if (!field && !raw) {
+        return { code: 0, output: `${renderEntry(result as never)}\n` };
+      }
       return { code: 0, output: `${JSON.stringify(result, null, 2)}\n` };
     }
     case "--help":
@@ -121,7 +131,9 @@ Subcommands:
   tool-uses      [--name <N>]                    list tool_use blocks
   tool-results   [--error] [--tool-use-id <id>]  list tool_result blocks
   text-search    <pattern> [--role user|assistant]  substring search
-  show           <ix> [--field <path>]           show entry (or one field) at ix
+  show           <ix> [--field <path>] [--raw]   show entry at ix; type-aware render by default
+                                                 (--raw emits pretty-JSON envelope,
+                                                  --field returns the raw value at a path)
 
 Format flags (any subcommand):
   --full     emit full JSON, one object per line

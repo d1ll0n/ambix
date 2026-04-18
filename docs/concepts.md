@@ -77,12 +77,12 @@ interface Artifact {
 
 `persistArtifact()` writes the artifact to `~/.ambix/sessions/<session-id>/artifact.json` by default (override via `outputRoot`).
 
-## Compact
+## Brief
 
-Compact is a standalone capability, independent of the distillation pipeline. It produces a chronological per-round summary of a session suitable for context recovery by humans or agents.
+Brief is a standalone capability, independent of the distillation pipeline. It produces a chronological per-round summary of a session suitable for context recovery by humans or agents.
 
 ```bash
-ambix compact /path/to/session.jsonl
+ambix brief /path/to/session.jsonl
 ```
 
 **How it works:**
@@ -111,6 +111,34 @@ ambix compact /path/to/session.jsonl
 | TodoWrite, TaskCreate, TaskUpdate, TaskList, TaskGet | `<Name> #<id> "<subject>" [status]` |
 | Playwright tools | `<short_name>(key=value)` |
 | *(other)* | Generic fallback: tool name + first string/number field |
+
+## Compact
+
+Compact produces a resumable compacted session JSONL from an existing session — an alternative to Claude Code's built-in `/compact`. Where `/compact` replaces prior history with a narrative summary and continues in place, `ambix compact` spawns a *new* session file with the same `cwd` / project slug so CC picks it up in `/resume`, and its on-disk layout trades bulk tool output for rehydration pointers.
+
+```bash
+ambix compact /path/to/session.jsonl --full-recent 10
+```
+
+**Output layout.** Three sections, in order:
+
+1. **Bundled summary.** One user-role message whose content is an `<ambix-compaction-marker>` preamble followed by a `<turns>` XML block. Each condensed source entry becomes one `<turn ix="N" kind="...">` child; tool calls become `<tool_use name="X" ix="N">` elements with per-tool structured children (`<file_path>`, `<old_string>`, `<command>`, `<prompt>`, etc.). Tool results become `<tool_result ix="N" name="X">{condenser-summary}</tool_result>`. User/assistant text blocks pass through verbatim.
+2. **Task\* sidecar entries.** `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_use + matched tool_result entries pass through verbatim as real JSONL entries. CC replays these on resume to rebuild its live task list; collapsing them into the bundled XML would break task-state restoration.
+3. **Preserved tail.** The last `--full-recent N` rounds of the source, passed through verbatim (full tool_result bodies intact).
+
+`file-history-snapshot` bookkeeping entries are dropped in the condensed range (CC never feeds them to the model on resume, and they commonly add 8+ KB apiece). **Caveat:** CC's "restore conversation and code" rewind feature uses these snapshots to restore file state; dropping them means rewind-with-code cannot reach any point inside the condensed range. Rewind back into the preserved tail still works.
+
+**Tool_use field representation.** Per-tool handlers know which fields are always-scalar (file_path, command, offset) and which are candidates for truncation (Edit old/new_string, Write content, Task prompt). Small values pass through verbatim. Values over `--max-field-bytes` (default 500) get rendered as `<field truncated="<bytes>">preview…</field>` — attribute-based truncation signal, preview ends with `…`. Rehydration happens via `ambix query <orig-session-id> <ix>`, with the instruction given once in the preamble rather than repeated per field.
+
+**Distinct from both CC's internal tool_use shape AND the harness's display-trimming pattern.** CC's tool_use JSON is `{"type":"tool_use","name":"Edit","input":{…}}`; our XML is `<tool_use name="Edit" ix="N">…</tool_use>` with per-tool children. CC's harness trims overly-long displayed tool_use values to `<truncated>preview…</truncated>[COMPACTION STUB — ... ambix query <sid> <ix>]` — our truncation attribute on per-field elements is a visually and structurally different shape. Both differences are intentional: they prevent the resumed agent from pattern-matching compacted summaries back into new tool calls. See `_experimental/structural/DEPRECATED.md` for the failure mode that drove this design.
+
+**Chain + sessionId.** The emitted file lives at `~/.claude/projects/<source-slug>/<new-uuid>.jsonl`. `parentUuid` is rebuilt as a linear chain through every emitted entry; `sessionId`, `promptId`, `requestId`, and `message.id` are all regenerated fresh — leaving any source-session routing IDs in place makes CC treat the compacted entries as duplicates and skip them when assembling resume context.
+
+**Tasks sidecar snapshot.** CC keys per-session task state by session UUID (`~/.claude/tasks/<sessionId>/`). A fresh UUID by itself has no matching tasks dir, so `TaskCreate`/`TaskUpdate` reminders from the source would be lost. `ambix compact` deep-copies the source's tasks dir to the new session's, so the compacted session inherits the task state at compaction time. The two sessions are independent from that point on: subsequent task mutations on one side don't leak to the other, which matters if the source is later forked or continued.
+
+**User preserve selectors.** `--preserve <kind>:<pattern>` exempts matching content from condensation. `tool:<glob>` keeps the tool_use input fields + real tool_result body inside the bundled `<turns>` block (useful when a tool IS the user-visible channel — e.g., an MCP Telegram plugin whose tool_use *is* the outgoing message); `type:<glob>` promotes matching entries to real JSONL pass-through (like `type:file-history-snapshot` if you want CC rewind-with-code to work through the condensed range). Repeatable; glob is `*`/`?`/literal with case-sensitive whole-name matching. Active selectors are listed in the bundled message's preamble so the resumed agent knows preserved content isn't a stub.
+
+**Why this over `/compact`:** a resuming agent reads a structured summary with explicit rehydration commands — it can reason about turn boundaries via the `<tool_use>`/`<tool_result>` structure and reach for `ambix query` to pull the exact historical content of any condensed turn. Validated end-to-end against CC 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
 
 ## Narrative schema
 

@@ -5,7 +5,8 @@ import { Session } from "parse-cc";
 import { MockAgentRunner } from "./agent/runner-mock.js";
 import { RealAgentRunner } from "./agent/runner-real.js";
 import { analyze } from "./analyze/index.js";
-import { compactSession } from "./compact/index.js";
+import { buildBrief } from "./brief/index.js";
+import { compactSession } from "./compact-session/index.js";
 import { fileAt } from "./file-at.js";
 import { formatSessionInfo } from "./info/format.js";
 import { sessionInfo } from "./info/index.js";
@@ -33,6 +34,8 @@ async function main(argv: string[]): Promise<number> {
       return runInfo(rest);
     case "distill":
       return runDistill(rest);
+    case "brief":
+      return runBrief(rest);
     case "compact":
       return runCompact(rest);
     case "query":
@@ -294,16 +297,16 @@ async function runDistill(args: string[]): Promise<number> {
   return 0;
 }
 
-async function runCompact(args: string[]): Promise<number> {
+async function runBrief(args: string[]): Promise<number> {
   if (hasHelp(args)) {
     console.error(
-      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     console.error("");
     console.error("Produce a chronological, per-round summary of a session for context recovery.");
     console.error("Each round, tool_use, and assistant text block is tagged with a rehydration");
     console.error("index (the same ix `ambix query <session> <ix>` resolves to), so an agent");
-    console.error("loading the compact output can pull full details for any entry on demand.");
+    console.error("loading the brief output can pull full details for any entry on demand.");
     console.error("");
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
@@ -314,18 +317,119 @@ async function runCompact(args: string[]): Promise<number> {
   }
   const sessionArg = args[0];
   if (!sessionArg) {
-    console.error("ambix compact: missing <session-path-or-id>");
+    console.error("ambix brief: missing <session-path-or-id>");
     console.error(
-      "usage: ambix compact <session-path-or-id> [--format xml|markdown] [--output <file>]"
+      "usage: ambix brief <session-path-or-id> [--format xml|markdown] [--output <file>]"
     );
     return 1;
   }
   const formatArg = parseFlag(args, "--format") ?? "xml";
   if (formatArg !== "xml" && formatArg !== "markdown") {
-    console.error(`ambix compact: invalid --format: ${formatArg} (expected xml or markdown)`);
+    console.error(`ambix brief: invalid --format: ${formatArg} (expected xml or markdown)`);
     return 1;
   }
   const outputArg = parseFlag(args, "--output");
+
+  let sessionPath: string;
+  try {
+    sessionPath = await resolveSessionPath(sessionArg);
+  } catch (err) {
+    console.error(`ambix brief: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
+  }
+
+  const session = new Session(sessionPath);
+  const { content, stats } = await buildBrief(session, { format: formatArg });
+
+  if (outputArg) {
+    await writeFile(outputArg, content, "utf8");
+    console.error(
+      `wrote brief (${formatArg}, ${stats.rounds} rounds, ${stats.toolUses} tool uses) to ${outputArg}`
+    );
+  } else {
+    process.stdout.write(content);
+  }
+  return 0;
+}
+
+async function runCompact(args: string[]): Promise<number> {
+  if (hasHelp(args)) {
+    console.error(
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
+    );
+    console.error("");
+    console.error("Produce a resumable compacted session JSONL. The last N rounds are preserved");
+    console.error("verbatim; older turns are collapsed into ONE user-role message containing an");
+    console.error("<ambix-compaction-marker> preamble plus a <turns> XML list with per-tool");
+    console.error("structured children. Tool_use input fields over --max-field-bytes get a");
+    console.error('`truncated="<bytes>"` attribute + preview body; full content is rehydratable');
+    console.error("via `ambix query <orig-session-id> <ix>`.");
+    console.error("");
+    console.error("The compacted session gets a fresh UUID and, by default, lands in CC's");
+    console.error("project dir for the source's cwd so it appears in /resume.");
+    console.error("");
+    console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
+    console.error("");
+    console.error("flags:");
+    console.error("  --full-recent N       rounds to preserve verbatim at the tail (default: 10)");
+    console.error(
+      "  --max-field-bytes N   truncate any condensed string field over N bytes (default: 500)"
+    );
+    console.error(
+      "  --preview-chars N     keep first N chars of truncated fields as preview (default: 100, 0 disables)"
+    );
+    console.error("  --preserve <kind>:<pattern>");
+    console.error("                        preserve matching entries verbatim (repeatable).");
+    console.error("                        tool:<glob>   — matched tool_use/tool_result render");
+    console.error("                                        verbatim inside the bundled summary");
+    console.error("                                        (no truncation, real result bodies)");
+    console.error("                        type:<glob>   — matched entries pass through as real");
+    console.error("                                        JSONL entries (like Task* entries do)");
+    console.error("                        glob: * matches any sequence, ? matches one char;");
+    console.error("                        case-sensitive whole-name match.");
+    console.error("  --output <path>       override destination path");
+    console.error("  --dry-run             print the plan without writing");
+    return 0;
+  }
+  const sessionArg = args[0];
+  if (!sessionArg) {
+    console.error("ambix compact: missing <session-path-or-id>");
+    console.error(
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
+    );
+    return 1;
+  }
+
+  const fullRecentArg = parseFlag(args, "--full-recent");
+  let fullRecent: number | undefined;
+  if (fullRecentArg !== undefined) {
+    fullRecent = Number.parseInt(fullRecentArg, 10);
+    if (Number.isNaN(fullRecent) || fullRecent < 0) {
+      console.error(`ambix compact: invalid --full-recent: ${fullRecentArg}`);
+      return 1;
+    }
+  }
+  const maxFieldBytesArg = parseFlag(args, "--max-field-bytes");
+  let maxFieldBytes: number | undefined;
+  if (maxFieldBytesArg !== undefined) {
+    maxFieldBytes = Number.parseInt(maxFieldBytesArg, 10);
+    if (Number.isNaN(maxFieldBytes) || maxFieldBytes < 0) {
+      console.error(`ambix compact: invalid --max-field-bytes: ${maxFieldBytesArg}`);
+      return 1;
+    }
+  }
+  const previewCharsArg = parseFlag(args, "--preview-chars");
+  let previewChars: number | undefined;
+  if (previewCharsArg !== undefined) {
+    previewChars = Number.parseInt(previewCharsArg, 10);
+    if (Number.isNaN(previewChars) || previewChars < 0) {
+      console.error(`ambix compact: invalid --preview-chars: ${previewCharsArg}`);
+      return 1;
+    }
+  }
+  const output = parseFlag(args, "--output");
+  const dryRun = args.includes("--dry-run");
+  const preserveSelectors = parseRepeatedFlag(args, "--preserve");
 
   let sessionPath: string;
   try {
@@ -336,16 +440,47 @@ async function runCompact(args: string[]): Promise<number> {
   }
 
   const session = new Session(sessionPath);
-  const { content, stats } = await compactSession(session, { format: formatArg });
-
-  if (outputArg) {
-    await writeFile(outputArg, content, "utf8");
-    console.error(
-      `wrote compact (${formatArg}, ${stats.rounds} rounds, ${stats.toolUses} tool uses) to ${outputArg}`
-    );
-  } else {
-    process.stdout.write(content);
+  let result: Awaited<ReturnType<typeof compactSession>>;
+  try {
+    result = await compactSession(session, {
+      fullRecent,
+      output,
+      dryRun,
+      maxFieldBytes,
+      previewChars,
+      preserveSelectors,
+    });
+  } catch (err) {
+    // Surface selector-parse errors (and any other call-time failures)
+    // with the `ambix compact:` prefix so the user sees which subcommand
+    // rejected their flags.
+    console.error(`ambix compact: ${err instanceof Error ? err.message : String(err)}`);
+    return 1;
   }
+
+  const prefix = result.dryRun ? "[dry-run] would write" : "wrote";
+  const preservedBits: string[] = [];
+  if (result.stats.userPreservedToolCount > 0) {
+    preservedBits.push(`${result.stats.userPreservedToolCount} user-preserved tool calls`);
+  }
+  if (result.stats.userPreservedTypeCount > 0) {
+    preservedBits.push(`${result.stats.userPreservedTypeCount} user-preserved type entries`);
+  }
+  const preservedSuffix = preservedBits.length > 0 ? `, ${preservedBits.join(", ")}` : "";
+  console.error(
+    `${prefix} compacted session to ${result.destPath} ` +
+      `(${result.stats.sourceEntryCount} source → ` +
+      `${result.stats.bundledTurnCount} bundled turns + ` +
+      `${result.stats.preservedEntryCount} preserved + ` +
+      `${result.stats.droppedEntryCount} dropped, ` +
+      `${result.stats.stubbedToolResultCount} tool_result stubs, ` +
+      `${result.stats.truncatedInputFieldCount} fields truncated${preservedSuffix}, ` +
+      `~${result.stats.bytesSaved} bytes saved)`
+  );
+  if (result.copiedTasksDir) {
+    console.error(`copied tasks dir: ${result.copiedTasksDir} (snapshot of source)`);
+  }
+  console.log(result.newSessionId);
   return 0;
 }
 
@@ -363,6 +498,15 @@ function parseFlag(args: string[], name: string): string | undefined {
   const idx = args.indexOf(name);
   if (idx === -1) return undefined;
   return args[idx + 1];
+}
+
+/** Collect every occurrence of `--name value`. Useful for repeatable flags. */
+function parseRepeatedFlag(args: string[], name: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length - 1; i++) {
+    if (args[i] === name && args[i + 1] !== undefined) out.push(args[i + 1]);
+  }
+  return out;
 }
 
 function printUsage(): void {
@@ -384,7 +528,10 @@ function printUsage(): void {
     "  stage    <session-path-or-id>    stage a session into a tmp workspace (prints layout JSON)"
   );
   console.error(
-    "  compact  <session-path-or-id>    chronological per-round summary for context recovery"
+    "  brief    <session-path-or-id>    chronological per-round summary for context recovery"
+  );
+  console.error(
+    "  compact  <session-path-or-id>    emit a resumable compacted JSONL (stubs + divider + preserved tail)"
   );
   console.error(
     "  file-at  <path> <ix>             print a tracked file's content at a given turn index"
@@ -400,7 +547,7 @@ function printUsage(): void {
     "Note: stage, file-at, and query are primarily tools that the staged distiller agent"
   );
   console.error(
-    "calls during a distill run. distill, analyze, and compact are the human-facing entry points."
+    "calls during a distill run. distill, analyze, and brief are the human-facing entry points."
   );
 }
 

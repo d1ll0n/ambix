@@ -1,6 +1,6 @@
 import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { compactSession } from "../../src/compact/index.js";
+import { buildBrief } from "../../src/brief/index.js";
 import {
   assistantLine,
   cleanupTempDir,
@@ -12,7 +12,7 @@ import {
   writeFixture,
 } from "../helpers/fixtures.js";
 
-describe("compactSession — end to end", () => {
+describe("buildBrief — end to end", () => {
   let dir: string;
   beforeEach(() => {
     dir = makeTempDir();
@@ -44,7 +44,7 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { content, stats } = await compactSession(session, { format: "xml" });
+    const { content, stats } = await buildBrief(session, { format: "xml" });
 
     expect(stats.rounds).toBe(1);
     expect(stats.toolUses).toBe(1);
@@ -85,7 +85,7 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { content } = await compactSession(session, { format: "xml" });
+    const { content } = await buildBrief(session, { format: "xml" });
 
     // Two consecutive Reads live at different entry ix'es; the <tools> tag
     // should carry a range idx="A-B" covering both. Per-line [N] prefixes
@@ -112,7 +112,7 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { content } = await compactSession(session, { format: "xml" });
+    const { content } = await buildBrief(session, { format: "xml" });
 
     // Branch marker should appear exactly once (round 1), not twice.
     const markers = content.match(/<git branch="main"\/>/g) ?? [];
@@ -133,7 +133,7 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { stats, content } = await compactSession(session, { format: "xml" });
+    const { stats, content } = await buildBrief(session, { format: "xml" });
 
     expect(stats.rawRounds).toBe(2);
     expect(stats.rounds).toBe(1);
@@ -151,9 +151,9 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { content } = await compactSession(session, { format: "markdown" });
+    const { content } = await buildBrief(session, { format: "markdown" });
 
-    expect(content).toContain("# Session compaction");
+    expect(content).toContain("# Session brief");
     expect(content).toContain("## Round 1");
     expect(content).toMatch(/\*\*User\*\* `\[ix \d+\]`/);
     expect(content).toContain("> ping");
@@ -179,7 +179,7 @@ describe("compactSession — end to end", () => {
       })
     );
     const session = new Session(writeFixture(dir, "session.jsonl", text));
-    const { content } = await compactSession(session, { format: "xml" });
+    const { content } = await buildBrief(session, { format: "xml" });
 
     expect(content).toMatch(/→ commit 57bc123/);
     expect(content).toContain("fix: bug");
