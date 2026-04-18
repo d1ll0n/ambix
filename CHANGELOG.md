@@ -4,9 +4,89 @@ All notable changes to ambix are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project aims to loosely follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-Until a `1.0.0` release is cut, every change lands under `[Unreleased]`.
 
-## [Unreleased]
+## [0.2.0] - 2026-04-17
+
+### Added
+- **New `ambix compact <session>` subcommand** (a different feature from the
+  one that shipped with this name in 0.1.0 — that one is now `ambix brief`).
+  Produces a resumable compacted session JSONL. The last `--full-recent N`
+  rounds pass through verbatim; older turns collapse into a single
+  user-role message containing an `<ambix-compaction-marker>` preamble +
+  `<turns>` XML list with per-tool structured children (`<file_path>`,
+  `<old_string>`, `<command>`, `<prompt>`, etc.). Fields over
+  `--max-field-bytes` get a `truncated="<bytes>"` attribute and a short
+  preview body; full content is rehydratable via
+  `ambix query <orig-session-id> <ix>`. The output lands in the source's
+  CC project slug so `/resume` picks it up. Alternative to CC's built-in
+  `/compact` for when you want a structured navigable history rather than
+  a narrative summary.
+- **`--preserve <kind>:<pattern>` flag** (repeatable). Exempts matching
+  entries from condensation.
+  `tool:<glob>` keeps matching tool_use input fields + tool_result body
+  verbatim inside the bundled XML — useful when a tool IS the user-visible
+  channel (e.g. an MCP Telegram plugin whose tool_use is the outgoing
+  message). `type:<glob>` promotes matching entries to real JSONL
+  pass-through, same path Task* entries take (e.g.
+  `type:file-history-snapshot` to keep CC rewind-with-code working through
+  the condensed range). Glob: `*` matches any sequence, `?` matches one
+  char; case-sensitive whole-name match.
+- **Task\* sidecar pass-through.** `TaskCreate` / `TaskUpdate` /
+  `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_use + matched
+  tool_result entries pass through as real JSONL entries rather than
+  being folded into the bundled XML. CC replays these on resume to
+  rebuild its live task list.
+- **Tasks-directory snapshot.** `~/.claude/tasks/<orig-sid>/` is
+  deep-copied (symlink-dereferenced) to the new session's tasks dir so
+  task state carries forward. UUID-validated against path traversal;
+  atomic write via `.tmp` + `O_EXCL` + rename with rollback on failure.
+  Uses parse-cc 0.2.0's new tasks-dir discovery helpers.
+- **`ambix info <session>` subcommand.** Lightweight summary of a session:
+  metadata (session_id, cwd, branch, turn count, duration, end state) +
+  token rollup (totals + per-model input/output/cache_read/cache_write).
+  Cheaper than `analyze` — no tools/files/churn scan. `--json` for
+  machine-readable output.
+- **Type-aware `ambix query <session> <ix>` output.** Default rendering
+  strips CC's JSON envelope (`parentUuid`, `promptId`, `usage`, etc.)
+  and real-newlines the content so `grep` works. `<persisted-output>`
+  spill wrappers surface as `[spilled to <path> — <size>]` + preview.
+  `--raw` opts into the old envelope form; `--field <path>` still
+  returns raw values at the path.
+- **`ambix brief <session>`** — the pre-0.2.0 `ambix compact` subcommand,
+  renamed. Markdown/XML chronological per-round summary for humans /
+  agents reading a session. Semantics unchanged.
+
+### Changed
+- **parse-cc bumped to `^0.2.0`** for `defaultTasksDir` / `findTasksDir` /
+  `listTasks`.
+- **Metadata end_state heuristic.** A session with a user turn but no
+  assistant response now reports `end_state: "unknown"` rather than
+  `"completed"`.
+- **File-history snapshot bytes populated.** `snapshots.json` entries
+  now carry an accurate `bytes` field (was always `null`).
+
+### Fixed
+- `src/agent/runner-real.ts::aggregateResultTokens` now prefers the SDK's
+  `modelUsage` (per-model multi-turn totals) over `result.usage`
+  (last-turn only); fallback preserved for SDK versions without it.
+- `ambix analyze` / `compact` / `brief` / `info` / `distill` / `stage`
+  all route session IDs through `parse-cc::findAllSessions` via
+  `resolveSessionPath`, so bare UUIDs or unambiguous UUID prefixes work
+  the same as file paths. Ambiguous prefixes error out with the list of
+  matches.
+
+### Removed
+- **Incorrectly-shipped `structural` mode for `ambix compact`.** A
+  previous iteration of this PR offered `--mode structural` that kept
+  every condensed entry as a real JSONL entry with `[COMPACTION STUB]`
+  strings replacing tool_result bodies. Smoke testing revealed that
+  shape matched CC harness's in-context display-trimming pattern exactly,
+  causing agents to echo stub text into new tool calls during normal
+  work. The code moved to `src/compact-session/_experimental/structural/`
+  with a `DEPRECATED.md` explaining the failure. The `--mode` CLI flag
+  was removed; `ambix compact` now runs bundled unconditionally.
+
+## [0.1.0] - 2026-04-16
 
 ### Added
 - **`ambix compact <session>` subcommand.** Produces a chronological,

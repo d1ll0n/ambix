@@ -1,6 +1,6 @@
 {
   "name": "ambix",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Session distillation pipeline for Claude Code logs — analyzes, stages, and produces structured summary artifacts for downstream agent review.",
   "license": "MIT",
   "author": "Dillon",
