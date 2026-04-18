@@ -4,6 +4,7 @@ import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildMetadata } from "../../src/stage/metadata.js";
 import {
+  FIXTURE_SESSION_ID,
   assistantLine,
   cleanupTempDir,
   joinLines,
@@ -42,7 +43,7 @@ describe("buildMetadata", () => {
 
     const meta = await buildMetadata(session);
 
-    expect(meta.session_id).toBe("session-test");
+    expect(meta.session_id).toBe(FIXTURE_SESSION_ID);
     expect(meta.cwd).toBe("/work/proj");
     expect(meta.git_branch).toBe("feature/x");
     expect(meta.version).toBe("2.1.97");

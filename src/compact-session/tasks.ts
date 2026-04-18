@@ -17,6 +17,9 @@ export interface CopyTasksResult {
   source: string | null;
 }
 
+/** CC session IDs are always UUIDs. Reject anything that isn't so path joins stay safe. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Snapshot the source session's tasks dir into the new (compacted) session's
  * tasks dir so the compacted session starts with the same task state.
@@ -25,7 +28,8 @@ export interface CopyTasksResult {
  * independently of the compacted one; sharing on-disk task state (via a
  * symlink) would mean `TaskUpdate`s from either side mutate the other's
  * state. Copying gives each session its own independent task lifecycle
- * from compaction time onward.
+ * from compaction time onward. Symlinks *inside* the source tasks tree
+ * are dereferenced (real file content gets copied) for the same reason.
  *
  * No-op when the source has no tasks dir. Throws if the destination
  * already exists — the caller owns uniqueness of `newSessionId` and
@@ -33,17 +37,42 @@ export interface CopyTasksResult {
  * silently stomping real state.
  */
 export async function copyTasksDir(opts: CopyTasksOptions): Promise<CopyTasksResult> {
-  const baseDir = opts.tasksBaseDir ?? defaultTasksDir();
+  // Path-traversal guard. session IDs flow from parsed JSONL; a crafted
+  // file could set origSessionId to e.g. "../../etc" and coerce fs.cp() to
+  // copy outside the tasks root. CC never emits non-UUID IDs, so rejecting
+  // non-UUIDs is strictly safe.
+  if (!UUID_RE.test(opts.origSessionId)) {
+    throw new Error(`copyTasksDir: refusing non-UUID origSessionId: ${opts.origSessionId}`);
+  }
+  if (!UUID_RE.test(opts.newSessionId)) {
+    throw new Error(`copyTasksDir: refusing non-UUID newSessionId: ${opts.newSessionId}`);
+  }
+
+  const baseDir = path.resolve(opts.tasksBaseDir ?? defaultTasksDir());
   const sourceTasksDir = await findTasksDir(opts.origSessionId, baseDir);
   if (!sourceTasksDir) return { copiedTo: null, source: null };
 
-  const destDir = path.join(baseDir, opts.newSessionId);
+  // Post-resolve containment check — belt-and-suspenders given the UUID
+  // guard above, but cheap and makes the invariant explicit.
+  const resolvedSource = path.resolve(sourceTasksDir);
+  if (!resolvedSource.startsWith(`${baseDir}${path.sep}`) && resolvedSource !== baseDir) {
+    throw new Error(`copyTasksDir: source path escapes tasksBaseDir: ${resolvedSource}`);
+  }
+
+  const destDir = path.resolve(path.join(baseDir, opts.newSessionId));
   await mkdir(baseDir, { recursive: true });
 
   // `cp` with `force: false` + `errorOnExist: true` refuses to overwrite,
   // which is what we want — the caller must have verified the destination
-  // is free before calling in.
-  await cp(sourceTasksDir, destDir, { recursive: true, force: false, errorOnExist: true });
+  // is free before calling in. `dereference: true` copies the real content
+  // of any symlinks inside the source tree so the snapshot is a standalone
+  // state rather than a tangle of pointers back into the source.
+  await cp(resolvedSource, destDir, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    dereference: true,
+  });
 
-  return { copiedTo: destDir, source: path.resolve(sourceTasksDir) };
+  return { copiedTo: destDir, source: resolvedSource };
 }

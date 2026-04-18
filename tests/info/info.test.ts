@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatSessionInfo } from "../../src/info/format.js";
 import { sessionInfo } from "../../src/info/index.js";
 import {
+  FIXTURE_SESSION_ID,
   assistantLine,
   cleanupTempDir,
   joinLines,
@@ -49,7 +50,7 @@ describe("sessionInfo", () => {
 
     const info = await sessionInfo(session);
 
-    expect(info.metadata.session_id).toBe("session-test");
+    expect(info.metadata.session_id).toBe(FIXTURE_SESSION_ID);
     expect(info.metadata.cwd).toBe("/work/proj");
     expect(info.metadata.git_branch).toBe("feature/x");
     expect(info.metadata.turn_count).toBe(3);
@@ -107,7 +108,7 @@ describe("formatSessionInfo", () => {
     const out = formatSessionInfo(info);
 
     expect(out).toContain("session:");
-    expect(out).toContain("session-test");
+    expect(out).toContain(FIXTURE_SESSION_ID);
     expect(out).toContain("version:");
     expect(out).toContain("2.1.97");
     expect(out).toContain("branch:");
@@ -131,7 +132,7 @@ describe("formatSessionInfo", () => {
 
     const out = formatSessionInfo(info);
 
-    expect(out).toContain("session-test");
+    expect(out).toContain(FIXTURE_SESSION_ID);
     expect(out).toContain("tokens:");
     // Totals row still present with zeros
     expect(out).toContain("in=0");

@@ -362,17 +362,33 @@ function shrinkText(text: string, ix: number, ctx: TurnContext): string {
 // envelope, so reserved chars must be escaped. We're deliberately permissive
 // (don't escape quotes in body text) to keep the output readable.
 //
-// XML 1.0 forbids most ASCII control bytes in text content (only \t, \n, \r
-// are legal below U+0020). Tool output sometimes contains control bytes
-// (ANSI sequences in streamed Bash output, NULs in binary-adjacent stdout);
-// strip them so the outer `<turns>` block stays parseable by anything that
-// actually parses it. Losing these chars is safe — they're not meaningful
-// in a text summary.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional strip of XML-illegal control chars
-const XML_ILLEGAL_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+// XML 1.0 (§2.2) restricts the legal character set. In text content:
+//   - U+0009, U+000A, U+000D are allowed
+//   - U+0000..U+0008, U+000B, U+000C, U+000E..U+001F are forbidden
+//   - U+FFFE and U+FFFF are forbidden noncharacters
+//   - Unpaired surrogates (U+D800..U+DFFF) are forbidden
+// Tool output sometimes smuggles control bytes through (ANSI sequences in
+// streamed Bash output, NULs in binary-adjacent stdout) and poorly-encoded
+// text can carry lone surrogates. Strip the whole illegal set so the
+// outer `<turns>` block stays parseable by any conforming XML consumer.
+// Losing these chars is safe — they're not meaningful in a text summary.
+// Built via `new RegExp()` with the ranges as a JS string so the literal
+// control points sit in a plain string rather than a regex literal — dodges
+// biome's "control char in regex" rule without a per-char ignore.
+const XML_ILLEGAL_RE = new RegExp(
+  [
+    // C0 controls except \t (U+0009), \n (U+000A), \r (U+000D)
+    "[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFE\\uFFFF]",
+    // High-surrogate not followed by a low-surrogate
+    "[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])",
+    // Low-surrogate not preceded by a high-surrogate
+    "(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]",
+  ].join("|"),
+  "g"
+);
 
 function stripIllegalControl(s: string): string {
-  return s.replace(XML_ILLEGAL_CONTROL_RE, "");
+  return s.replace(XML_ILLEGAL_RE, "");
 }
 
 function escapeXmlText(s: string): string {

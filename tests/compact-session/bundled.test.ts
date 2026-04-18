@@ -398,6 +398,44 @@ describe("emitBundled", () => {
     expect(content.includes("\u001b")).toBe(false);
   });
 
+  it("strips XML-1.0-illegal noncharacters + lone surrogates alongside C0 controls", async () => {
+    // C0 control (NUL) + XML-1.0-illegal noncharacter (U+FFFE) + lone
+    // high surrogate (U+D800 without a trailing low-surrogate) in a user
+    // text block. All three should be stripped so a conforming XML parser
+    // can read the bundled <turns> block.
+    const illegal = "nul\u0000 nonchar\uFFFE lone\uD800end";
+    const entries = await loadEntries(
+      joinLines(
+        userLine({ text: illegal, uuid: "u_bad" }),
+        assistantLine({ text: "ok", uuid: "a" }),
+        userLine({ text: "tail", uuid: "u_tail" })
+      )
+    );
+
+    const { entries: out } = emitBundled({
+      sourceEntries: entries,
+      newSessionId: "s",
+      origSessionId: "orig",
+      fullRecent: 1,
+      cwd: "/w",
+      gitBranch: "main",
+      version: "2.1.100",
+      uuidFn: deterministicUuidFn("u"),
+      bundledUuid: "bundled",
+      bundledPromptId: "bp",
+      bundledTimestamp: "2026-04-17T10:00:00Z",
+    });
+
+    const content = (out[0] as { message: { content: string } }).message.content;
+    expect(content.includes("\u0000")).toBe(false);
+    expect(content.includes("\uFFFE")).toBe(false);
+    expect(content.includes("\uD800")).toBe(false);
+    // Surrounding characters survive intact.
+    expect(content).toContain("nul");
+    expect(content).toContain("nonchar");
+    expect(content).toContain("lone");
+  });
+
   it("empty source → one bundled message with no <turns>, no preserved entries", async () => {
     const { entries: out, stats } = emitBundled({
       sourceEntries: [],

@@ -1,6 +1,7 @@
 // src/compact-session/index.ts
 import { randomUUID } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
+import { rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { type Session, defaultTasksDir } from "parse-cc";
@@ -79,19 +80,13 @@ export async function compactSession(
 
   let copiedTasksDir: string | null = null;
   if (!opts.dryRun) {
-    await mkdir(path.dirname(destPath), { recursive: true });
-    const jsonl = `${emitted.map((e) => JSON.stringify(e)).join("\n")}\n`;
-    await writeFile(destPath, jsonl, "utf8");
-
-    // Snapshot the source's tasks dir so the compacted session starts
-    // with the same task state. Copy (not symlink) so the source can be
-    // continued/forked independently without state entanglement.
-    const copyResult = await copyTasksDir({
+    copiedTasksDir = await writeCompactedSession({
+      destPath,
+      emitted,
       origSessionId: session.sessionId,
       newSessionId,
       tasksBaseDir: opts.tasksBaseDir,
     });
-    copiedTasksDir = copyResult.copiedTo;
   }
 
   return {
@@ -101,6 +96,69 @@ export async function compactSession(
     copiedTasksDir,
     stats,
   };
+}
+
+/**
+ * Write the JSONL + snapshot the tasks dir with atomic-ish semantics:
+ *
+ *   1. Write JSONL to `<destPath>.tmp` with `O_EXCL` (flag: "wx"). This
+ *      closes the TOCTOU window that a plain existence-check + writeFile
+ *      leaves open.
+ *   2. Copy the source tasks dir into the new session's tasks slot.
+ *   3. Only after (1) and (2) both succeed, rename `.tmp → destPath`.
+ *
+ * On any failure, remove the `.tmp` file and (if we got that far) the
+ * tasks dir. We don't want a partially-written session to show up in CC's
+ * `/resume` list.
+ */
+async function writeCompactedSession(args: {
+  destPath: string;
+  emitted: ReadonlyArray<Record<string, unknown>>;
+  origSessionId: string;
+  newSessionId: string;
+  tasksBaseDir: string | undefined;
+}): Promise<string | null> {
+  const tmpPath = `${args.destPath}.tmp`;
+  await mkdir(path.dirname(args.destPath), { recursive: true });
+
+  const jsonl = `${args.emitted.map((e) => JSON.stringify(e)).join("\n")}\n`;
+  // `flag: "wx"` = open for writing, fail if the path exists (O_EXCL).
+  // Closes the race between the pickFreshSessionId check and this write.
+  try {
+    await writeFile(tmpPath, jsonl, { encoding: "utf8", flag: "wx" });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(
+        `compactSession: tmp path already exists (another run in flight?): ${tmpPath}`
+      );
+    }
+    throw err;
+  }
+
+  let copiedTasksDir: string | null = null;
+  try {
+    const copyResult = await copyTasksDir({
+      origSessionId: args.origSessionId,
+      newSessionId: args.newSessionId,
+      tasksBaseDir: args.tasksBaseDir,
+    });
+    copiedTasksDir = copyResult.copiedTo;
+
+    // Promote the tmp file to its final name. `rename` on the same
+    // filesystem is atomic on POSIX; this is the closest we get to an
+    // all-or-nothing commit without a db.
+    await rename(tmpPath, args.destPath);
+  } catch (err) {
+    // Roll back on failure — we don't want orphaned artifacts under
+    // ~/.claude/projects or ~/.claude/tasks.
+    await rm(tmpPath, { force: true }).catch(() => {});
+    if (copiedTasksDir) {
+      await rm(copiedTasksDir, { recursive: true, force: true }).catch(() => {});
+    }
+    throw err;
+  }
+
+  return copiedTasksDir;
 }
 
 /**

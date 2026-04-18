@@ -4,6 +4,7 @@ import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { stage } from "../../src/stage/index.js";
 import {
+  FIXTURE_SESSION_ID,
   assistantLine,
   cleanupTempDir,
   joinLines,
@@ -36,7 +37,7 @@ describe("stage", () => {
     expect(existsSync(layout.sessionPath)).toBe(true);
 
     const meta = JSON.parse(readFileSync(layout.metadataPath, "utf8"));
-    expect(meta.session_id).toBe("session-test");
+    expect(meta.session_id).toBe(FIXTURE_SESSION_ID);
     expect(meta.turn_count).toBe(2);
 
     const lines = readFileSync(layout.sessionPath, "utf8").split("\n").filter(Boolean);

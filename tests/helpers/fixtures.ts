@@ -21,6 +21,13 @@ export function cleanupTempDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
+/**
+ * Default session UUID for fixtures. Using a valid UUID (not "session-test")
+ * lets fixtures flow through code paths that guard against path traversal by
+ * rejecting non-UUID session IDs (see compact-session/tasks.ts).
+ */
+export const FIXTURE_SESSION_ID = "00000000-0000-0000-0000-0000000000aa";
+
 let counter = 0;
 function nextId(): string {
   counter++;
@@ -53,7 +60,7 @@ export function userLine(opts: {
     text = "hello",
     uuid = nextId(),
     parentUuid = null,
-    sessionId = "session-test",
+    sessionId = FIXTURE_SESSION_ID,
     ts = "2026-04-13T00:00:00Z",
     cwd = "/work",
     gitBranch = "main",
@@ -89,7 +96,7 @@ export function assistantLine(opts: {
     text = "ok",
     uuid = nextId(),
     parentUuid = null,
-    sessionId = "session-test",
+    sessionId = FIXTURE_SESSION_ID,
     ts = "2026-04-13T00:00:00Z",
     model = "claude-sonnet-4-6",
     inputTokens = 10,
@@ -171,7 +178,7 @@ export function toolResultUserLine(opts: {
     type: "user",
     uuid: opts.uuid ?? `u-${Math.random().toString(36).slice(2, 10)}`,
     parentUuid: opts.parentUuid ?? null,
-    sessionId: opts.sessionId ?? "session-test",
+    sessionId: opts.sessionId ?? FIXTURE_SESSION_ID,
     timestamp: opts.ts ?? "2026-04-13T10:00:00Z",
     message: {
       role: "user",

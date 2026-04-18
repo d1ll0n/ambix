@@ -4,6 +4,7 @@ import { Session, listTasks } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { compactSession } from "../../src/compact-session/index.js";
 import {
+  FIXTURE_SESSION_ID,
   assistantLine,
   cleanupTempDir,
   joinLines,
@@ -43,7 +44,7 @@ describe("compactSession", () => {
 
     expect(result.dryRun).toBe(false);
     expect(result.destPath).toBe(output);
-    expect(result.newSessionId).not.toBe("session-test");
+    expect(result.newSessionId).not.toBe(FIXTURE_SESSION_ID);
     expect(existsSync(output)).toBe(true);
 
     // Round-trip the compacted file
@@ -133,14 +134,19 @@ describe("compactSession", () => {
       dir,
       "source.jsonl",
       joinLines(
-        userLine({ text: "one", uuid: "a", cwd: "/work", sessionId: "orig-with-tasks" }),
-        assistantLine({ text: "two", uuid: "b", sessionId: "orig-with-tasks" })
+        userLine({
+          text: "one",
+          uuid: "a",
+          cwd: "/work",
+          sessionId: "00000000-0000-0000-0000-00000000bbbb",
+        }),
+        assistantLine({ text: "two", uuid: "b", sessionId: "00000000-0000-0000-0000-00000000bbbb" })
       )
     );
     // Seed a couple of tasks for the source.
-    mkdirSync(path.join(tasksBaseDir, "orig-with-tasks"), { recursive: true });
+    mkdirSync(path.join(tasksBaseDir, "00000000-0000-0000-0000-00000000bbbb"), { recursive: true });
     writeFileSync(
-      path.join(tasksBaseDir, "orig-with-tasks", "1.json"),
+      path.join(tasksBaseDir, "00000000-0000-0000-0000-00000000bbbb", "1.json"),
       JSON.stringify({
         id: "1",
         subject: "pending thing",
@@ -170,7 +176,7 @@ describe("compactSession", () => {
 
     // Mutations on the source's tasks AFTER copy don't leak into the new session.
     writeFileSync(
-      path.join(tasksBaseDir, "orig-with-tasks", "2.json"),
+      path.join(tasksBaseDir, "00000000-0000-0000-0000-00000000bbbb", "2.json"),
       JSON.stringify({
         id: "2",
         subject: "added after compact",
@@ -188,7 +194,7 @@ describe("compactSession", () => {
     const source = writeFixture(
       dir,
       "source.jsonl",
-      joinLines(userLine({ text: "hi", uuid: "a", cwd: "/work", sessionId: "s" }))
+      joinLines(userLine({ text: "hi", uuid: "a", cwd: "/work" }))
     );
     const output = path.join(dir, "already-there.jsonl");
     writeFileSync(output, "previous content");
@@ -205,7 +211,14 @@ describe("compactSession", () => {
     const source = writeFixture(
       dir,
       "source.jsonl",
-      joinLines(userLine({ text: "hi", uuid: "a", cwd: "/work", sessionId: "no-tasks" }))
+      joinLines(
+        userLine({
+          text: "hi",
+          uuid: "a",
+          cwd: "/work",
+          sessionId: "00000000-0000-0000-0000-00000000cccc",
+        })
+      )
     );
     const output = path.join(dir, "compacted.jsonl");
 
