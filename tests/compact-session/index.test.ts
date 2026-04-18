@@ -96,7 +96,7 @@ describe("compactSession", () => {
     expect(result.destPath).toMatch(/\/\.claude\/projects\/-specific-test-cwd\/[0-9a-f-]+\.jsonl$/);
   });
 
-  it("structural mode: carries the condensed/preserved split described by --fullRecent into stats", async () => {
+  it("bundled: carries the condensed/preserved split described by --fullRecent into stats", async () => {
     const source = writeFixture(
       dir,
       "source.jsonl",
@@ -112,20 +112,22 @@ describe("compactSession", () => {
     const output = path.join(dir, "compacted.jsonl");
 
     const result = await compactSession(new Session(source), {
-      mode: "structural",
       fullRecent: 1,
       output,
       tasksBaseDir,
     });
 
     expect(result.stats.sourceEntryCount).toBe(6);
-    expect(result.stats.condensedEntryCount).toBe(4); // rounds 1 + 2
+    // Bundled: condensed range (4 entries across rounds 1+2) is collapsed
+    // into ONE bundled user-message; bundledTurnCount counts the turns
+    // rendered into that message's <turns> XML block.
+    expect(result.stats.bundledTurnCount).toBe(4);
     expect(result.stats.preservedEntryCount).toBe(2); // round 3
 
-    // Verify the written file contains exactly one isCompactSummary entry
+    // File contains the bundled user-message carrying the marker.
     const rawLines = readFileSync(output, "utf8").trim().split("\n");
-    const summaryLines = rawLines.filter((l) => l.includes("<ambix-compaction-marker>"));
-    expect(summaryLines).toHaveLength(1);
+    const markerLines = rawLines.filter((l) => l.includes("<ambix-compaction-marker>"));
+    expect(markerLines).toHaveLength(1);
   });
 
   it("snapshots the source's tasks dir into the new session (copy, not symlink)", async () => {

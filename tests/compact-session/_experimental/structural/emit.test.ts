@@ -1,6 +1,6 @@
 import { Session } from "parse-cc";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { emit } from "../../src/compact-session/emit.js";
+import { emit } from "../../../../src/compact-session/_experimental/structural/emit.js";
 import {
   assistantLine,
   cleanupTempDir,
@@ -10,7 +10,7 @@ import {
   toolUseAssistantLine,
   userLine,
   writeFixture,
-} from "../helpers/fixtures.js";
+} from "../../../helpers/fixtures.js";
 
 // Deterministic uuid generator for tests — returns predictable strings.
 function makeUuidFn() {

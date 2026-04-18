@@ -355,19 +355,15 @@ async function runBrief(args: string[]): Promise<number> {
 async function runCompact(args: string[]): Promise<number> {
   if (hasHelp(args)) {
     console.error(
-      "usage: ambix compact <session-path-or-id> [--mode bundled|structural] [--full-recent N] [--output <path>] [--dry-run]"
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
     );
     console.error("");
     console.error("Produce a resumable compacted session JSONL. The last N rounds are preserved");
-    console.error("verbatim; older turns are condensed.");
-    console.error("");
-    console.error("Modes:");
-    console.error("  bundled    (default) Collapse all condensed turns into a single user");
-    console.error("             message with <ambix-compaction-marker> + <turns> XML.");
-    console.error("             Smallest output; agent-friendly for /resume.");
-    console.error("  structural Keep each condensed turn as a real entry with tool_result");
-    console.error("             bodies swapped for rehydration stubs. Preserves per-entry");
-    console.error("             fidelity; useful for downstream tooling that walks the log.");
+    console.error("verbatim; older turns are collapsed into ONE user-role message containing an");
+    console.error("<ambix-compaction-marker> preamble plus a <turns> XML list with per-tool");
+    console.error("structured children. Tool_use input fields over --max-field-bytes get a");
+    console.error('`truncated="<bytes>"` attribute + preview body; full content is rehydratable');
+    console.error("via `ambix query <orig-session-id> <ix>`.");
     console.error("");
     console.error("The compacted session gets a fresh UUID and, by default, lands in CC's");
     console.error("project dir for the source's cwd so it appears in /resume.");
@@ -375,8 +371,6 @@ async function runCompact(args: string[]): Promise<number> {
     console.error("  <session-path-or-id>  path to a .jsonl file, or a session UUID (or prefix)");
     console.error("");
     console.error("flags:");
-    console.error("  --mode <bundled|structural>");
-    console.error("                        render mode (default: bundled)");
     console.error("  --full-recent N       rounds to preserve verbatim at the tail (default: 10)");
     console.error(
       "  --max-field-bytes N   truncate any condensed string field over N bytes (default: 500)"
@@ -392,19 +386,9 @@ async function runCompact(args: string[]): Promise<number> {
   if (!sessionArg) {
     console.error("ambix compact: missing <session-path-or-id>");
     console.error(
-      "usage: ambix compact <session-path-or-id> [--mode bundled|structural] [--full-recent N] [--output <path>] [--dry-run]"
+      "usage: ambix compact <session-path-or-id> [--full-recent N] [--output <path>] [--dry-run]"
     );
     return 1;
-  }
-
-  const modeArg = parseFlag(args, "--mode");
-  let mode: "bundled" | "structural" | undefined;
-  if (modeArg !== undefined) {
-    if (modeArg !== "bundled" && modeArg !== "structural") {
-      console.error(`ambix compact: --mode must be "bundled" or "structural" (got: ${modeArg})`);
-      return 1;
-    }
-    mode = modeArg;
   }
 
   const fullRecentArg = parseFlag(args, "--full-recent");
@@ -447,7 +431,6 @@ async function runCompact(args: string[]): Promise<number> {
 
   const session = new Session(sessionPath);
   const result = await compactSession(session, {
-    mode,
     fullRecent,
     output,
     dryRun,
@@ -456,24 +439,15 @@ async function runCompact(args: string[]): Promise<number> {
   });
 
   const prefix = result.dryRun ? "[dry-run] would write" : "wrote";
-  // Bundled mode collapses the condensed range into a single user message;
-  // the count of turns that went into it is `bundledTurnCount`. Structural
-  // mode reports the real-entry count via `condensedEntryCount`. Show
-  // whichever is meaningful for the mode that ran.
-  const resolvedMode = mode ?? "bundled";
-  const condensedLabel =
-    resolvedMode === "bundled"
-      ? `${result.stats.bundledTurnCount} bundled turns`
-      : `${result.stats.condensedEntryCount} condensed entries`;
   console.error(
     `${prefix} compacted session to ${result.destPath} ` +
       `(${result.stats.sourceEntryCount} source → ` +
-      `${condensedLabel} + ` +
+      `${result.stats.bundledTurnCount} bundled turns + ` +
       `${result.stats.preservedEntryCount} preserved + ` +
       `${result.stats.droppedEntryCount} dropped, ` +
       `${result.stats.stubbedToolResultCount} tool_result stubs, ` +
       `${result.stats.truncatedInputFieldCount} fields truncated, ` +
-      `~${result.stats.bytesSaved} bytes saved, mode=${resolvedMode})`
+      `~${result.stats.bytesSaved} bytes saved)`
   );
   if (result.copiedTasksDir) {
     console.error(`copied tasks dir: ${result.copiedTasksDir} (snapshot of source)`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSummaryEntry } from "../../src/compact-session/summary.js";
+import { buildSummaryEntry } from "../../../../src/compact-session/_experimental/structural/summary.js";
 
 const baseOpts = {
   origSessionId: "orig-123",

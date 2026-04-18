@@ -1,6 +1,6 @@
 // src/compact-session/stub.ts
 import type { ToolResultBlock } from "parse-cc";
-import { condenseToolUse, toolResultText } from "../brief/condensers.js";
+import { condenseToolUse, toolResultText } from "../../../brief/condensers.js";
 
 export interface BuildStubOptions {
   /** Session UUID of the ORIGINAL (pre-compaction) session. */

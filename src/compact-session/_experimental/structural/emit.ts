@@ -1,4 +1,9 @@
-// src/compact-session/emit.ts
+// src/compact-session/_experimental/structural/emit.ts
+//
+// DEPRECATED — see ./DEPRECATED.md. Structural-mode emitter kept here only
+// so the code path stays compilable + testable. The shipping `ambix compact`
+// uses bundled mode exclusively; this file is not reachable from the CLI or
+// the default compactSession() dispatch.
 import { randomUUID } from "node:crypto";
 import type { LogEntry, ToolResultBlock } from "parse-cc";
 import {
@@ -8,13 +13,13 @@ import {
   isToolUseBlock,
   isUserEntry,
 } from "parse-cc";
-import { groupIntoRounds } from "../brief/rounds.js";
-import { PRESERVE_TOOLS } from "./preserve-tools.js";
+import { groupIntoRounds } from "../../../brief/rounds.js";
+import { PRESERVE_TOOLS } from "../../preserve-tools.js";
+import { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS } from "../../tuning.js";
+import type { CompactSessionStats } from "../../types.js";
 import { buildStub, measureToolResultBytes } from "./stub.js";
 import { buildSummaryEntry } from "./summary.js";
 import { truncateOversizedStrings } from "./truncate.js";
-import { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS } from "./tuning.js";
-import type { CompactSessionStats } from "./types.js";
 
 export { DEFAULT_MAX_FIELD_BYTES, DEFAULT_PREVIEW_CHARS };
 

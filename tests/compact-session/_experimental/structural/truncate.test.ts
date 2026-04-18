@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type TruncateStats,
   truncateOversizedStrings,
-} from "../../src/compact-session/truncate.js";
+} from "../../../../src/compact-session/_experimental/structural/truncate.js";
 
 function emptyStats(): TruncateStats {
   return { truncatedFieldCount: 0, bytesSaved: 0 };

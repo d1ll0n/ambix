@@ -1,6 +1,9 @@
 import type { ToolResultBlock } from "parse-cc";
 import { describe, expect, it } from "vitest";
-import { buildStub, measureToolResultBytes } from "../../src/compact-session/stub.js";
+import {
+  buildStub,
+  measureToolResultBytes,
+} from "../../../../src/compact-session/_experimental/structural/stub.js";
 
 function result(content: unknown, isError = false): ToolResultBlock {
   return {

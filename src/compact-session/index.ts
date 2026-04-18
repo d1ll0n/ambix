@@ -6,12 +6,10 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { type Session, defaultTasksDir } from "parse-cc";
 import { emitBundled } from "./bundled.js";
-import { emit } from "./emit.js";
 import { copyTasksDir } from "./tasks.js";
-import type { CompactMode, CompactSessionOptions, CompactSessionResult } from "./types.js";
+import type { CompactSessionOptions, CompactSessionResult } from "./types.js";
 
 const DEFAULT_FULL_RECENT = 10;
-const DEFAULT_MODE: CompactMode = "bundled";
 /** Cap on UUID re-rolls when one collides with an existing file/dir. */
 const UUID_ROLL_MAX_ATTEMPTS = 8;
 
@@ -36,7 +34,6 @@ export async function compactSession(
 ): Promise<CompactSessionResult> {
   const entries = await session.messages();
   const fullRecent = opts.fullRecent ?? DEFAULT_FULL_RECENT;
-  const mode = opts.mode ?? DEFAULT_MODE;
 
   const cwd = session.cwd ?? "";
   const gitBranch = session.gitBranch ?? "";
@@ -53,30 +50,19 @@ export async function compactSession(
     tasksBase,
   });
 
-  const { entries: emitted, stats } =
-    mode === "bundled"
-      ? emitBundled({
-          sourceEntries: entries,
-          newSessionId,
-          origSessionId: session.sessionId,
-          fullRecent,
-          cwd,
-          gitBranch,
-          version,
-          maxFieldBytes: opts.maxFieldBytes,
-          previewChars: opts.previewChars,
-        })
-      : emit({
-          sourceEntries: entries,
-          newSessionId,
-          origSessionId: session.sessionId,
-          fullRecent,
-          cwd,
-          gitBranch,
-          version,
-          maxFieldBytes: opts.maxFieldBytes,
-          previewChars: opts.previewChars,
-        });
+  // Bundled is the only shipped mode. Structural emitter is parked under
+  // `_experimental/structural/` — see that directory's DEPRECATED.md for why.
+  const { entries: emitted, stats } = emitBundled({
+    sourceEntries: entries,
+    newSessionId,
+    origSessionId: session.sessionId,
+    fullRecent,
+    cwd,
+    gitBranch,
+    version,
+    maxFieldBytes: opts.maxFieldBytes,
+    previewChars: opts.previewChars,
+  });
 
   let copiedTasksDir: string | null = null;
   if (!opts.dryRun) {
@@ -213,7 +199,6 @@ async function pickFreshSessionId(args: {
 }
 
 export type {
-  CompactMode,
   CompactSessionOptions,
   CompactSessionResult,
   CompactSessionStats,
