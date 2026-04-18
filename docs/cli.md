@@ -78,32 +78,52 @@ Each round, tool_use, and assistant text block is tagged with a rehydration inde
 Emit a new resumable session JSONL with older turns condensed and the last N rounds preserved verbatim. Alternative to Claude Code's built-in `/compact`, which replaces prior history with a narrative summary in place; this produces a new resumable session file with rehydration pointers.
 
 ```
-ambix compact <session-path-or-id> [--mode bundled|structural] [--full-recent N]
-                                   [--max-field-bytes N] [--preview-chars N]
-                                   [--output <path>] [--dry-run]
+ambix compact <session-path-or-id> [--full-recent N] [--max-field-bytes N]
+                                   [--preview-chars N] [--output <path>] [--dry-run]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--mode <bundled\|structural>` | `bundled` | Render layout for the condensed range (see below) |
 | `--full-recent N` | `10` | Rounds preserved verbatim at the tail |
 | `--max-field-bytes N` | `500` | Truncate any condensed string field above this UTF-8 byte count |
 | `--preview-chars N` | `100` | Chars of the original kept as preview inside the truncation marker (`0` disables the preview) |
 | `--output <path>` | `~/.claude/projects/<source-slug>/<new-uuid>.jsonl` | Destination path |
 | `--dry-run` | off | Print the plan and stats without writing |
 
-**Modes.** The two render modes differ only in how the *condensed* range (everything older than `--full-recent N` rounds) is represented on disk. Both use the same preserved tail and the same Task* sidecar handling.
+**Output layout.**
 
-- **`bundled` (default)** — all condensed turns collapse into ONE user-role message whose body is a `<ambix-compaction-marker>` preamble followed by `<turns>` XML containing one `<turn ix="N" kind="..." name="...">…</turn>` per condensed entry (condenser one-liner for tool_use / tool_result, text verbatim with size-capped fallback for user/assistant). Smallest output; the prose renderer sees every field, so unknown-tool payloads can't leak. Pick this unless you have a specific reason to want real per-entry records.
-- **`structural`** — every condensed entry stays as a real log entry with its role preserved; tool_result bodies are swapped for `[COMPACTION STUB — …]` strings that reference `ambix query <orig-session-id> <ix>`; oversized tool_use input fields (Edit `old_string`/`new_string`, Write `content`, MCP payloads, etc.) are truncated with a `<truncated>…</truncated>` preview and the same rehydration marker. Per-entry fidelity makes the output easier for downstream tooling to walk.
+```
+[ONE user-role message]   ← <ambix-compaction-marker> preamble
+                              + <turns> XML list with per-tool structured children
+[Task* pass-throughs]     ← TaskCreate/Update/… tool_use + matched tool_result
+                              entries preserved VERBATIM (CC replay on resume)
+[preserved tail]          ← last --full-recent rounds verbatim
+```
 
-**Preserved tail + Task* sidecar.** In both modes the last `--full-recent N` source rounds are emitted verbatim, and `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_uses + their matched tool_results pass through verbatim regardless of mode. CC replays these on resume to rebuild its live task list; redacting them would break task-state restoration. In bundled mode the preserved Task* entries sit between the bundled summary message and the preserved tail.
+Each `<tool_use>` inside the bundled message has per-tool element children (`<file_path>`, `<old_string>`, `<command>`, `<prompt>`, etc.) — the renderer dispatches on tool name and knows which fields are scalar vs. truncatable. Fields over `--max-field-bytes` get a `truncated="<bytes>"` attribute + short preview body ending with `…`:
 
-**Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary (counts + mode tag) is printed to stderr.
+```xml
+<tool_use name="Edit" ix="47">
+  <file_path>src/foo.ts</file_path>
+  <old_string truncated="2048">function foo() {…</old_string>
+  <new_string truncated="2103">function foo(x: number) {…</new_string>
+</tool_use>
+<tool_result ix="48" name="Edit">+12 -5 hunks</tool_result>
+```
 
-**Tasks dir snapshot.** If the source session has a per-session tasks directory (`~/.claude/tasks/<orig-session-id>/`), it's deep-copied to the new session's tasks dir (`~/.claude/tasks/<new-session-id>/`) so the compacted session starts with the same task state. The copy is independent: later `TaskCreate` / `TaskUpdate` calls on the compacted session don't mutate the source's tasks, and vice versa — source sessions can still be continued or forked cleanly. No-op when the source has no tasks dir.
+Conversational user/assistant text blocks pass through verbatim (no `--max-field-bytes` cap — only a 16 KB sanity clamp for truly unreasonable blocks, which becomes `<truncated_text bytes="N" ix="M">preview…</truncated_text>`).
 
-**Rehydration:** when Claude resumes into a compacted session and encounters a stub (or reads the bundled `<turns>` list), it can run the embedded `ambix query` command to retrieve the original pre-compaction tool output. Empirically validated against Claude Code 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
+**Task* sidecar pass-through.** `TaskCreate` / `TaskUpdate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` tool_use entries and their matched tool_result entries pass through verbatim as real JSONL entries (not summarized into the bundled XML). CC replays these on resume to rebuild its live task list; redacting or restructuring them would break task-state restoration.
+
+**Destination default** places the new session in the same CC project slug as the source, so it appears in CC's `/resume` list when the user is in the source's cwd. On success, the new session UUID is printed to stdout; a plan summary (entry counts, truncation stats, bytes saved) is printed to stderr.
+
+**Tasks dir snapshot.** If the source session has a per-session tasks directory (`~/.claude/tasks/<orig-session-id>/`), it's deep-copied to the new session's tasks dir (`~/.claude/tasks/<new-session-id>/`) so the compacted session starts with the same task state. The copy is independent: later `TaskCreate` / `TaskUpdate` calls on the compacted session don't mutate the source's tasks, and vice versa.
+
+**Rehydration:** when Claude resumes into a compacted session and needs the original content of any condensed turn, it runs `ambix query <orig-session-id> N` — the preamble tells the agent once how to do this, and every `<turn>`, `<tool_use>`, and `<tool_result>` element carries the `ix` attribute it needs. Empirically validated against Claude Code 2.1.112 — see `docs/specs/2026-04-17-compact-to-session.md`.
+
+**Known limitation:** CC's "restore conversation and code" rewind feature reconstructs file state from `file-history-snapshot` entries, which ambix drops from the condensed range. Rewind-with-code from a compacted session can only reach into the preserved tail.
+
+**Why not a per-entry "structural" layout?** An earlier design emitted every condensed entry as a real JSONL log entry with tool_result bodies swapped for `[COMPACTION STUB — …]` strings and tool_use inputs wrapped in `<truncated>…</truncated>{marker}` syntax. Real-session smoke testing revealed that shape was identical to how CC's harness trims in-context display of prior tool_use values — the agent would pattern-match the trimmed display back into new tool calls, silently writing literal stub text into files it Edited. The bundled per-tool XML shape (distinct from CC's internal tool_use JSON AND distinct from the harness's truncation display) is the replacement. The structural emitter is parked under `src/compact-session/_experimental/structural/` for reference; see its `DEPRECATED.md`.
 
 ## file-at
 

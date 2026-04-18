@@ -42,12 +42,9 @@ Compact a session into a new resumable JSONL:
 ambix compact /path/to/session.jsonl --full-recent 10
 ```
 
-Emits a new session file Claude Code's `/resume` picks up in the source's project dir. The last `--full-recent N` rounds are preserved verbatim; older turns are condensed. Two render modes for the condensed range:
+Emits a new session file Claude Code's `/resume` picks up in the source's project dir. The last `--full-recent N` rounds are preserved verbatim; older turns collapse into a single user-role message containing an `<ambix-compaction-marker>` preamble plus a `<turns>` XML list with per-tool structured children. Small tool_use input fields pass through verbatim; fields over `--max-field-bytes` get a `truncated="<bytes>"` attribute + short preview body and are rehydratable on demand via `ambix query <orig-session-id> <ix>`. Task* tool_use + matched tool_result entries pass through as real entries so CC can rebuild its live task list on resume.
 
-- **`--mode bundled` (default)** — all condensed turns collapse into a single user-role message with an `<ambix-compaction-marker>` preamble + XML `<turns>` list of per-entry summaries. Smallest output (~3-10% of source), simplest for the resumed agent to parse, and structurally immune to unknown-tool bloat. `TaskCreate` / `TaskUpdate` / etc. are still emitted as real entries so CC can rebuild its live task list.
-- **`--mode structural`** — every condensed turn stays as a real entry; tool_result bodies are swapped for rehydration stubs and oversized string fields are truncated with a preview. Bigger (~25-30% of source) but keeps per-entry fidelity for downstream tooling.
-
-Either way, an agent can pull the original content of any condensed turn on demand via `ambix query <orig-session-id> <ix>`. Alternative to CC's built-in `/compact` when you want turn-by-turn navigability instead of a narrative summary.
+Typical session sizes compact to ~3-10% of source. Alternative to CC's built-in `/compact` when you want a structured navigable history rather than a narrative summary.
 
 **Known limitation:** CC's "restore conversation and code" rewind relies on `file-history-snapshot` entries, which ambix drops from the condensed range to save bytes. Rewind-with-code from a compacted session can only reach into the preserved tail; code state before that is only recoverable via `ambix query` + manual file edits.
 
@@ -59,7 +56,7 @@ Either way, an agent can pull the original content of any condensed turn on dema
 | `ambix analyze <session>` | Deterministic analysis only (JSON to stdout) |
 | `ambix info <session>` | Minimal session summary (metadata + token rollup) |
 | `ambix brief <session>` | Chronological per-round summary for context recovery |
-| `ambix compact <session>` | Emit a resumable compacted JSONL (`--mode bundled` default, or `--mode structural`) |
+| `ambix compact <session>` | Emit a resumable compacted JSONL (bundled XML summary + preserved tail) |
 | `ambix stage <session>` | Stage a session into a tmp workspace |
 | `ambix file-at <path> <ix>` | Print a tracked file's content at a given turn index |
 | `ambix query <session> <sub>` | Search within a session log (tool-uses, tool-results, text-search, show) |
